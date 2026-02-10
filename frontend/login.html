@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yönetici Girişi — Yoklama Sistemi</title>
+  <link rel="icon" href="logo3.png" sizes="16x16" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50:'#f0f9ff',100:'#e0f2fe',200:'#bae6fd',300:'#7dd3fc',
+              400:'#38bdf8',500:'#0ea5e9',600:'#0284c7',700:'#0369a1',
+              800:'#075985',900:'#0c4a6e'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { background: linear-gradient(135deg, #0284c7 0%, #0c4a6e 100%); }
+    .spinner { animation: spin .8s linear infinite; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-4">
+
+  <div class="bg-white rounded-xl shadow-xl p-8 w-full max-w-md">
+    <!-- Logo + Başlık -->
+    <div class="text-center mb-8">
+      <img src="logo2.png" alt="Logo" class="h-16 mx-auto mb-3" />
+      <h1 class="text-2xl font-bold text-gray-800">Suluova MYO</h1>
+      <p class="text-sm text-gray-500 mt-1">Yönetici Paneli Girişi</p>
+    </div>
+
+    <form id="loginForm" class="space-y-5" autocomplete="off">
+      <!-- Kullanıcı Adı -->
+      <div>
+        <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Kullanıcı Adı</label>
+        <input type="text" id="username" required autocomplete="username"
+               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+               placeholder="Kullanıcı adınızı girin" />
+      </div>
+
+      <!-- Şifre -->
+      <div>
+        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Şifre</label>
+        <input type="password" id="password" required autocomplete="current-password"
+               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+               placeholder="Şifrenizi girin" />
+      </div>
+
+      <!-- Giriş Butonu -->
+      <button type="submit" id="loginBtn"
+              class="w-full bg-primary-600 text-white py-2.5 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors text-sm font-medium">
+        Giriş Yap
+      </button>
+
+      <!-- Hata / Bilgi Mesajı -->
+      <div id="msgBox" class="hidden text-sm text-center rounded-lg px-3 py-2"></div>
+    </form>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const API = window.location.origin;
+
+    // Zaten JWT varsa direkt dashboard'a gönder
+    if (localStorage.getItem("adminJwt")) {
+      window.location.href = "admin-dashboard.html";
+      return;
+    }
+
+    const form     = document.getElementById("loginForm");
+    const loginBtn = document.getElementById("loginBtn");
+    const msgBox   = document.getElementById("msgBox");
+
+    function showMsg(text, isError) {
+      msgBox.textContent = text;
+      msgBox.className = `text-sm text-center rounded-lg px-3 py-2 ${isError ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`;
+      msgBox.classList.remove("hidden");
+      if (!isError) setTimeout(() => msgBox.classList.add("hidden"), 3000);
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msgBox.classList.add("hidden");
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+
+      if (!username || !password) {
+        showMsg("Kullanıcı adı ve şifre gereklidir.", true);
+        return;
+      }
+
+      loginBtn.disabled = true;
+      loginBtn.innerHTML = '<span class="spinner inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-1 align-middle"></span>Giriş yapılıyor…';
+
+      try {
+        const res = await fetch(`${API}/api/admin/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.token) {
+          // JWT kaydet
+          localStorage.setItem("adminJwt", data.token);
+          // Legacy uyumluluk
+          localStorage.setItem("adminToken", "Hello@123");
+
+          showMsg("Giriş başarılı, yönlendiriliyorsunuz…", false);
+          setTimeout(() => { window.location.href = "admin-dashboard.html"; }, 400);
+        } else if (res.status === 401) {
+          showMsg("Kullanıcı adı veya şifre hatalı.", true);
+        } else if (res.status === 429) {
+          showMsg(data.message || "Çok fazla deneme. Lütfen bekleyin.", true);
+        } else {
+          showMsg(data.message || "Giriş başarısız. Lütfen tekrar deneyin.", true);
+        }
+      } catch (err) {
+        console.error("Login hatası:", err);
+        showMsg("Sunucuya bağlanılamadı. Lütfen tekrar deneyin.", true);
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = "Giriş Yap";
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

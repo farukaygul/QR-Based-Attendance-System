@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Yoklama Durumum</title>
+  <link rel="icon" href="logo3.png" sizes="16x16" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-4">
+  <div class="max-w-lg mx-auto">
+    <div class="bg-white rounded-lg shadow-md p-6">
+
+      <!-- Logo ve Başlık -->
+      <div class="text-center mb-4">
+        <img src="/logo2.png" alt="Üniversite Logosu" class="h-16 mx-auto mb-2" />
+        <h1 class="text-xl font-bold text-gray-800">Suluova Meslek Yüksekokulu</h1>
+        <p class="text-xs text-gray-500">Yapay Zeka Okuryazarlığı Dersi Yoklaması</p>
+      </div>
+
+      <hr class="mb-4" />
+
+      <h2 class="text-lg font-semibold text-gray-800 text-center mb-1">Yoklama Durumum</h2>
+      <p id="summaryText" class="text-center text-gray-500 text-sm mb-5"></p>
+
+      <div id="loading" class="text-center text-gray-400 py-8">Yükleniyor...</div>
+      <div id="errorBox" class="hidden text-center text-red-500 py-8"></div>
+
+      <div id="tableContainer" class="hidden">
+        <table class="w-full border border-gray-200 text-sm">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="px-4 py-2 border text-left">Tarih</th>
+              <th class="px-4 py-2 border text-left">Durum</th>
+            </tr>
+          </thead>
+          <tbody id="attendanceBody"></tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 text-center">
+        <a href="/" class="text-blue-600 hover:underline text-sm">&larr; Ana Sayfaya Dön</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      const rollNo = new URLSearchParams(window.location.search).get("rollNo");
+      const loadingEl = document.getElementById("loading");
+      const errorEl = document.getElementById("errorBox");
+      const tableContainer = document.getElementById("tableContainer");
+      const tbody = document.getElementById("attendanceBody");
+      const summaryEl = document.getElementById("summaryText");
+
+      if (!rollNo) {
+        loadingEl.classList.add("hidden");
+        errorEl.textContent = "URL'de öğrenci numarası bulunamadı.";
+        errorEl.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${window.location.origin}/api/students/${encodeURIComponent(rollNo)}/attendance`);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || "Veri yüklenemedi");
+        }
+
+        const { data } = await res.json();
+        loadingEl.classList.add("hidden");
+
+        summaryEl.textContent = `Öğrenci No: ${rollNo}  •  Katılım: ${data.presentDays}/${data.totalClasses}  •  %${data.attendancePercentage}`;
+
+        if (!data.attendanceRecords || data.attendanceRecords.length === 0) {
+          errorEl.textContent = "Henüz yoklama kaydı bulunmamaktadır.";
+          errorEl.classList.remove("hidden");
+          return;
+        }
+
+        data.attendanceRecords.forEach((rec) => {
+          const tr = document.createElement("tr");
+          const isPresent = rec.status === "present";
+          const statusText = isPresent ? "Var" : "Yok";
+          const statusClass = isPresent ? "text-green-600" : "text-red-500";
+          tr.innerHTML = `
+            <td class="px-4 py-2 border">${rec.date || "-"}</td>
+            <td class="px-4 py-2 border font-medium ${statusClass}">${statusText}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        tableContainer.classList.remove("hidden");
+      } catch (err) {
+        console.error("Fetch error:", err);
+        loadingEl.classList.add("hidden");
+        errorEl.textContent = err.message;
+        errorEl.classList.remove("hidden");
+      }
+    });
+  </script>
+</body>
+</html>

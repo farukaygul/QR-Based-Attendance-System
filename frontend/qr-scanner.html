@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR ile Yoklama Al</title>
+  <link rel="icon" href="logo3.png" sizes="16x16" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50:'#f0f9ff',100:'#e0f2fe',200:'#bae6fd',300:'#7dd3fc',
+              400:'#38bdf8',500:'#0ea5e9',600:'#0284c7',700:'#0369a1',
+              800:'#075985',900:'#0c4a6e'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .spinner { animation: spin .8s linear infinite; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- ===== HEADER ===== -->
+  <header class="bg-white shadow-sm no-print">
+    <div class="max-w-3xl mx-auto flex items-center justify-between px-4 py-3">
+      <div class="flex items-center gap-3">
+        <img src="/logo2.png" alt="Logo" class="h-12" />
+        <div>
+          <h1 class="text-lg font-bold text-gray-800 leading-tight">Suluova MYO</h1>
+          <p class="text-xs text-gray-500">Yapay Zeka Okuryazarlığı — QR ile Yoklama</p>
+        </div>
+      </div>
+      <a href="admin-dashboard.html"
+         class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+        Panele Dön
+      </a>
+    </div>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main class="max-w-xl mx-auto p-4 mt-4">
+    <div class="bg-white rounded-lg shadow-md p-6">
+
+      <!-- Kontroller -->
+      <div class="flex flex-wrap gap-3 items-end mb-6 no-print">
+        <div class="flex-grow">
+          <label for="ttlSelect" class="block text-sm font-medium text-gray-700 mb-1">QR Geçerlilik Süresi</label>
+          <select id="ttlSelect"
+                  class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
+            <option value="1">1 dakika</option>
+            <option value="3">3 dakika</option>
+            <option value="5">5 dakika</option>
+            <option value="10">10 dakika</option>
+            <option value="15" selected>15 dakika</option>
+            <option value="30">30 dakika</option>
+            <option value="45">45 dakika</option>
+            <option value="60">60 dakika</option>
+          </select>
+        </div>
+        <button id="generateBtn"
+                class="bg-primary-600 text-white px-5 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium whitespace-nowrap">
+          QR Üret
+        </button>
+      </div>
+
+      <!-- QR Alanı (printable) -->
+      <div id="qrArea" class="text-center">
+        <!-- Print başlığı (sadece print'te görünür) -->
+        <div class="hidden print:block mb-4">
+          <img src="/logo2.png" alt="Logo" class="h-14 mx-auto mb-2" />
+          <p class="text-lg font-bold">Suluova MYO — Yoklama QR</p>
+        </div>
+
+        <!-- Loading -->
+        <div id="qrLoading" class="hidden py-12">
+          <div class="spinner inline-block w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
+          <p class="text-sm text-gray-400 mt-2">QR üretiliyor…</p>
+        </div>
+
+        <!-- QR Image -->
+        <div id="qrImageWrapper" class="hidden flex flex-col items-center">
+          <img id="qrImage" src="" alt="QR Kod"
+               class="border-4 border-primary-500 rounded-lg mx-auto" />
+        </div>
+
+        <!-- Hata -->
+        <p id="errorMsg" class="text-red-500 text-sm mt-3"></p>
+
+        <!-- Oturum bilgisi -->
+        <div id="sessionInfo" class="hidden mt-4 text-sm text-gray-600 space-y-1">
+          <p>Oturum Kodu: <span id="sessionId" class="font-mono text-gray-800"></span></p>
+          <p>Kalan Süre: <span id="expiryTime" class="font-semibold text-primary-700"></span></p>
+        </div>
+      </div>
+
+      <!-- QR Boyut Kontrolü -->
+      <div id="sizeControls" class="hidden flex items-center justify-center gap-3 mt-4 no-print">
+        <button id="sizeDown"
+                class="w-9 h-9 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded-lg text-lg font-bold transition-colors">−</button>
+        <span id="sizeLabel" class="text-sm text-gray-600 w-24 text-center">Boyut: 256px</span>
+        <button id="sizeUp"
+                class="w-9 h-9 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded-lg text-lg font-bold transition-colors">+</button>
+      </div>
+
+      <!-- Alt Butonlar -->
+      <div id="actionButtons" class="hidden flex flex-wrap justify-center gap-2 mt-5 no-print">
+        <button id="fullscreenBtn"
+                class="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 text-sm font-medium transition-colors">
+          Tam Ekran
+        </button>
+        <button id="downloadBtn"
+                class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium transition-colors">
+          İndir (PNG)
+        </button>
+        <button id="printBtn"
+                class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+          Yazdır
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const API_BASE = window.location.origin;
+
+    // ═══════════════════════════════════════════
+    //  AUTH KONTROLÜ (JWT + Legacy)
+    // ═══════════════════════════════════════════
+    async function checkAuth() {
+      const jwt = localStorage.getItem("adminJwt");
+      const legacyToken = localStorage.getItem("adminToken");
+
+      if (jwt) {
+        try {
+          const res = await fetch(`${API_BASE}/api/admin/me`, {
+            headers: { Authorization: `Bearer ${jwt}` },
+          });
+          if (res.ok) return; // JWT geçerli
+        } catch (_) { /* ağ hatası */ }
+        // JWT geçersiz → temizle, login'e yönlendir
+        localStorage.removeItem("adminJwt");
+        localStorage.removeItem("adminToken");
+        localStorage.removeItem("admin");
+        window.location.href = "login.html";
+        return;
+      }
+
+      if (legacyToken === "Hello@123") return; // legacy mod
+
+      window.location.href = "login.html";
+    }
+
+    // Auth kontrol sonrası sayfayı başlat
+    checkAuth().then(() => { initQRPage(); });
+
+    function initQRPage() {
+
+    // ===== State =====
+    let currentSessionId = null;
+    let expiryInterval = null;
+    let qrSize = 256;
+    const QR_MIN = 160;
+    const QR_MAX = 640;
+    const QR_STEP = 32;
+
+    // ===== Elements =====
+    const ttlSelect = document.getElementById("ttlSelect");
+    const generateBtn = document.getElementById("generateBtn");
+    const qrLoading = document.getElementById("qrLoading");
+    const qrImageWrapper = document.getElementById("qrImageWrapper");
+    const qrImage = document.getElementById("qrImage");
+    const errorMsg = document.getElementById("errorMsg");
+    const sessionInfo = document.getElementById("sessionInfo");
+    const sessionIdEl = document.getElementById("sessionId");
+    const expiryTimeEl = document.getElementById("expiryTime");
+    const sizeControls = document.getElementById("sizeControls");
+    const sizeLabel = document.getElementById("sizeLabel");
+    const actionButtons = document.getElementById("actionButtons");
+
+    // ===== Boyut =====
+    function applySize() {
+      qrImage.style.width = qrSize + "px";
+      qrImage.style.height = qrSize + "px";
+      sizeLabel.textContent = `Boyut: ${qrSize}px`;
+    }
+
+    document.getElementById("sizeDown").addEventListener("click", () => {
+      if (qrSize > QR_MIN) { qrSize -= QR_STEP; applySize(); }
+    });
+    document.getElementById("sizeUp").addEventListener("click", () => {
+      if (qrSize < QR_MAX) { qrSize += QR_STEP; applySize(); }
+    });
+
+    // ===== Geri Sayım =====
+    function startCountdown(ms) {
+      clearInterval(expiryInterval);
+      let remaining = ms;
+
+      function tick() {
+        if (remaining <= 0) {
+          clearInterval(expiryInterval);
+          expiryTimeEl.textContent = "Süre doldu";
+          qrImageWrapper.classList.add("hidden");
+          sizeControls.classList.add("hidden");
+          actionButtons.classList.add("hidden");
+          errorMsg.textContent = "QR süresi doldu. Lütfen yeniden üretin.";
+          currentSessionId = null;
+          return;
+        }
+        const m = Math.floor(remaining / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        expiryTimeEl.textContent = `${m} dk ${s.toString().padStart(2, "0")} sn`;
+      }
+
+      tick();
+      expiryInterval = setInterval(() => { remaining -= 1000; tick(); }, 1000);
+    }
+
+    // ===== QR Üret =====
+    async function generateQR() {
+      clearInterval(expiryInterval);
+      generateBtn.disabled = true;
+      generateBtn.textContent = "Üretiliyor…";
+      errorMsg.textContent = "";
+      qrImageWrapper.classList.add("hidden");
+      sizeControls.classList.add("hidden");
+      actionButtons.classList.add("hidden");
+      sessionInfo.classList.add("hidden");
+      qrLoading.classList.remove("hidden");
+
+      const ttlMinutes = ttlSelect.value;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/generate-qr?ttlMinutes=${ttlMinutes}`);
+        const data = await res.json();
+
+        if (!res.ok || data.status !== "success" || !data.qrImage || !data.sessionId) {
+          throw new Error(data.message || "Sunucudan geçersiz yanıt");
+        }
+
+        currentSessionId = data.sessionId;
+
+        qrImage.onload = () => {
+          qrLoading.classList.add("hidden");
+          qrImageWrapper.classList.remove("hidden");
+          sizeControls.classList.remove("hidden");
+          actionButtons.classList.remove("hidden");
+        };
+        qrImage.onerror = () => {
+          qrLoading.classList.add("hidden");
+          errorMsg.textContent = "QR görseli yüklenemedi.";
+        };
+        qrImage.src = `${API_BASE}${data.qrImage}?t=${Date.now()}`;
+        applySize();
+
+        sessionIdEl.textContent = data.sessionId;
+        sessionInfo.classList.remove("hidden");
+        startCountdown(data.expiresIn);
+
+      } catch (err) {
+        console.error("QR üretim hatası:", err);
+        qrLoading.classList.add("hidden");
+        errorMsg.textContent = err.message || "QR üretilemedi. Lütfen tekrar deneyin.";
+        currentSessionId = null;
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = "QR Üret";
+      }
+    }
+
+    generateBtn.addEventListener("click", generateQR);
+
+    // ===== Tam Ekran =====
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+    const qrArea = document.getElementById("qrArea");
+
+    fullscreenBtn.addEventListener("click", () => {
+      if (!document.fullscreenElement) {
+        if (qrArea.requestFullscreen) {
+          qrArea.requestFullscreen().catch(() => {
+            errorMsg.textContent = "Tarayıcınız tam ekranı desteklemiyor.";
+          });
+        } else {
+          errorMsg.textContent = "Tarayıcınız tam ekranı desteklemiyor.";
+        }
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      fullscreenBtn.textContent = document.fullscreenElement ? "Tam Ekrandan Çık" : "Tam Ekran";
+      if (document.fullscreenElement) {
+        qrArea.style.background = "#fff";
+        qrArea.style.display = "flex";
+        qrArea.style.flexDirection = "column";
+        qrArea.style.alignItems = "center";
+        qrArea.style.justifyContent = "center";
+      } else {
+        qrArea.style = "";
+      }
+    });
+
+    // ===== İndir (PNG) =====
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      if (!qrImage.src || qrImage.classList.contains("hidden")) return;
+      const a = document.createElement("a");
+      a.href = qrImage.src;
+      a.download = `yoklama_qr_${currentSessionId || "code"}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+
+    // ===== Yazdır =====
+    document.getElementById("printBtn").addEventListener("click", () => {
+      window.print();
+    });
+
+    // ===== Sayfa açılınca otomatik üret =====
+    document.addEventListener("DOMContentLoaded", () => {
+      generateQR();
+    });
+
+    } // end initQRPage
+
+  })();
+  </script>
+</body>
+</html>

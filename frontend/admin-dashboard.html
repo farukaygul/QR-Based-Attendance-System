@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yönetici Paneli - Yoklama</title>
+  <link rel="icon" href="logo3.png" sizes="16x16" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50:'#f0f9ff',100:'#e0f2fe',200:'#bae6fd',300:'#7dd3fc',
+              400:'#38bdf8',500:'#0ea5e9',600:'#0284c7',700:'#0369a1',
+              800:'#075985',900:'#0c4a6e'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .spinner { animation: spin .8s linear infinite; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+      padding: .75rem 1.25rem; border-radius: .5rem; color: #fff;
+      font-size: .875rem; max-width: 24rem; box-shadow: 0 4px 12px rgba(0,0,0,.15);
+      animation: slideIn .3s ease;
+    }
+    @keyframes slideIn { from{transform:translateY(1rem);opacity:0} to{transform:translateY(0);opacity:1} }
+    .toast-success { background: #16a34a; }
+    .toast-error   { background: #dc2626; }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- ===== HEADER ===== -->
+  <header class="bg-white shadow-sm sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+      <div class="flex items-center gap-3">
+        <img src="logo2.png" alt="Logo" class="h-12" />
+        <div>
+          <h1 class="text-lg font-bold text-gray-800 leading-tight">Suluova MYO</h1>
+          <p class="text-xs text-gray-500">Yapay Zeka Okuryazarlığı — Yönetici Paneli</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <a href="qr-scanner.html"
+           class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium">
+          QR ile Yoklama Al
+        </a>
+        <button id="logoutBtn"
+                class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm font-medium">
+          Çıkış
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main class="max-w-6xl mx-auto p-4 space-y-6">
+
+    <!-- 1) Tarihe Göre Yoklama -->
+    <section class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">📅 Tarihe Göre Yoklama Görüntüle</h2>
+      <div class="flex flex-wrap gap-2 items-center">
+        <input type="date" id="attendanceDate"
+               class="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
+        <button id="searchDateBtn"
+                class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+          Görüntüle
+        </button>
+      </div>
+
+      <div id="dateResults" class="hidden mt-4">
+        <div class="flex flex-wrap items-center justify-between mb-3">
+          <p class="text-sm text-gray-600">
+            <span id="summaryDate" class="font-medium"></span> —
+            <span id="totalPresent" class="font-semibold text-green-700"></span>
+          </p>
+          <button id="downloadDateCsvBtn"
+                  class="bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 text-xs font-medium">
+            CSV İndir
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full border border-gray-200 text-sm">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="px-3 py-2 border text-left">Öğrenci No</th>
+                <th class="px-3 py-2 border text-left">Ad Soyad</th>
+                <th class="px-3 py-2 border text-left">Bölüm</th>
+                <th class="px-3 py-2 border text-left">Saat</th>
+                <th class="px-3 py-2 border text-left">Mesafe</th>
+              </tr>
+            </thead>
+            <tbody id="dateAttendanceTable" class="bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2) Öğrenci Sorgulama -->
+    <section class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">🔍 Öğrenci Yoklama Sorgula</h2>
+      <div class="flex flex-wrap gap-2 items-center">
+        <input type="text" id="studentRollNo" placeholder="Öğrenci numarası (9 hane)"
+               inputmode="numeric" maxlength="9" pattern="\d{9}"
+               class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
+        <button id="searchStudentBtn"
+                class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+          Sorgula
+        </button>
+      </div>
+      <p id="studentError" class="text-red-500 mt-2 text-sm"></p>
+
+      <div id="studentDetails" class="hidden mt-4">
+        <div class="flex flex-wrap items-center justify-between mb-3">
+          <p id="studentSummary" class="text-sm font-medium text-gray-700"></p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full border border-gray-200 text-sm">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="px-3 py-2 border text-left">Tarih</th>
+                <th class="px-3 py-2 border text-left">Saat</th>
+                <th class="px-3 py-2 border text-left">Durum</th>
+                <th class="px-3 py-2 border text-left">Mesafe</th>
+              </tr>
+            </thead>
+            <tbody id="studentAttendanceTable" class="bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3) Devamsızlık Aralığı -->
+    <section class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 Devamsızlık Aralığına Göre Sorgula</h2>
+      <div class="flex flex-wrap gap-2 items-center">
+        <input type="number" id="minPercentage" placeholder="Min %" min="0" max="100"
+               class="w-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
+        <span class="text-gray-500 text-sm">—</span>
+        <input type="number" id="maxPercentage" placeholder="Max %" min="0" max="100"
+               class="w-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm" />
+        <button id="searchPercentageBtn"
+                class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+          Ara
+        </button>
+      </div>
+      <p id="percentageError" class="text-red-500 mt-2 text-sm"></p>
+
+      <div id="percentageResults" class="hidden mt-4">
+        <div class="flex flex-wrap items-center justify-between mb-3">
+          <p class="text-sm text-gray-600">
+            <span id="percentageRange" class="font-medium"></span> —
+            <span id="totalStudentsCount" class="font-semibold text-blue-700"></span>
+          </p>
+          <button id="downloadPercentageCsvBtn"
+                  class="bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 text-xs font-medium">
+            CSV İndir
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full border border-gray-200 text-sm">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="px-3 py-2 border text-left">Öğrenci No</th>
+                <th class="px-3 py-2 border text-left">Ad Soyad</th>
+                <th class="px-3 py-2 border text-left">Bölüm</th>
+                <th class="px-3 py-2 border text-left">Katılım %</th>
+                <th class="px-3 py-2 border text-left">Katılım</th>
+              </tr>
+            </thead>
+            <tbody id="percentageResultsTable" class="bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  4) 👨‍🎓 ÖĞRENCİ YÖNETİMİ (Accordion)         -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <section class="bg-white rounded-lg shadow-md">
+      <button id="toggleStudentPanel" type="button"
+              class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors rounded-lg">
+        <h2 class="text-lg font-semibold text-gray-800">👨‍🎓 Öğrenci Yönetimi</h2>
+        <span id="studentPanelArrow" class="text-gray-400 text-xl transition-transform">▼</span>
+      </button>
+      <div id="studentPanel" class="hidden px-6 pb-6 space-y-4">
+
+        <!-- Arama + Filtre -->
+        <div class="flex flex-wrap gap-2 items-end">
+          <div class="flex-grow">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Arama</label>
+            <input type="text" id="stuSearch" placeholder="Öğrenci no veya ad"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Bölüm</label>
+            <select id="stuSectionFilter"
+                    class="w-36 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 bg-white">
+              <option value="">Tümü</option>
+            </select>
+          </div>
+          <button id="stuRefreshBtn"
+                  class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 text-sm font-medium">
+            Yenile
+          </button>
+          <button id="stuNewBtn"
+                  class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium">
+            + Yeni Öğrenci
+          </button>
+          <button id="stuCsvBtn"
+                  class="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 text-xs font-medium">
+            CSV İndir
+          </button>
+        </div>
+
+        <!-- CSV Import -->
+        <div id="csvImportArea" class="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 space-y-2">
+          <div class="flex flex-wrap gap-2 items-center">
+            <label class="text-sm font-medium text-gray-700">📥 CSV ile Toplu Yükle</label>
+            <a href="#" id="csvTemplateLink" class="text-xs text-primary-600 hover:underline">Şablon indir</a>
+          </div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <input type="file" id="csvFileInput" accept=".csv"
+                   class="text-sm text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
+            <button id="csvUploadBtn"
+                    class="bg-primary-600 text-white px-4 py-1.5 rounded-lg hover:bg-primary-700 text-sm font-medium">
+              Yükle
+            </button>
+          </div>
+          <p id="csvLegacyWarn" class="hidden text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded">Bu özellik için JWT ile giriş yapmalısınız.</p>
+          <!-- Import sonuç kartı -->
+          <div id="csvResultCard" class="hidden mt-2 border border-gray-200 rounded-lg p-3 bg-white text-sm space-y-2">
+            <div class="flex flex-wrap gap-4">
+              <span id="csvResTotal" class="font-medium"></span>
+              <span id="csvResInserted" class="text-green-600"></span>
+              <span id="csvResUpdated" class="text-blue-600"></span>
+              <span id="csvResErrors" class="text-red-500"></span>
+            </div>
+            <div id="csvErrorList" class="hidden">
+              <p class="text-xs font-medium text-red-600 mb-1">Hatalı satırlar:</p>
+              <div id="csvErrorTable" class="max-h-40 overflow-y-auto text-xs"></div>
+              <button id="csvErrorDownload" class="mt-1 text-xs text-primary-600 hover:underline">Hata raporunu indir (CSV)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sonuç bilgisi -->
+        <p id="stuTotal" class="text-xs text-gray-500"></p>
+
+        <!-- Tablo -->
+        <div class="overflow-x-auto">
+          <table class="min-w-full border border-gray-200 text-sm">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="px-3 py-2 border text-left">Öğrenci No</th>
+                <th class="px-3 py-2 border text-left">Ad Soyad</th>
+                <th class="px-3 py-2 border text-left">Bölüm</th>
+                <th class="px-3 py-2 border text-left">Sınıf No</th>
+                <th class="px-3 py-2 border text-center">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody id="stuTableBody" class="bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  5) 📋 YOKLAMA YÖNETİMİ (Accordion)           -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <section class="bg-white rounded-lg shadow-md">
+      <button id="toggleAttPanel" type="button"
+              class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors rounded-lg">
+        <h2 class="text-lg font-semibold text-gray-800">📋 Yoklama Yönetimi</h2>
+        <span id="attPanelArrow" class="text-gray-400 text-xl transition-transform">▼</span>
+      </button>
+      <div id="attPanel" class="hidden px-6 pb-6 space-y-4">
+
+        <!-- Filtreler -->
+        <div class="flex flex-wrap gap-2 items-end">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Tarih</label>
+            <input type="date" id="attDateFilter"
+                   class="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Öğrenci No</label>
+            <input type="text" id="attRollFilter" placeholder="Opsiyonel" maxlength="9"
+                   class="w-32 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Durum</label>
+            <select id="attStatusFilter"
+                    class="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
+              <option value="">Tümü</option>
+              <option value="present">Var</option>
+              <option value="absent">Yok</option>
+            </select>
+          </div>
+          <button id="attListBtn"
+                  class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 text-sm font-medium">
+            Listele
+          </button>
+          <button id="attManualBtn"
+                  class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium">
+            + Manuel Ekle
+          </button>
+        </div>
+
+        <p id="attTotal" class="text-xs text-gray-500"></p>
+
+        <div class="overflow-x-auto">
+          <table class="min-w-full border border-gray-200 text-sm">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="px-3 py-2 border text-left">Tarih</th>
+                <th class="px-3 py-2 border text-left">Saat</th>
+                <th class="px-3 py-2 border text-left">Öğrenci No</th>
+                <th class="px-3 py-2 border text-left">Ad Soyad</th>
+                <th class="px-3 py-2 border text-left">Bölüm</th>
+                <th class="px-3 py-2 border text-left">Durum</th>
+                <th class="px-3 py-2 border text-left">Mesafe</th>
+                <th class="px-3 py-2 border text-left">Manuel?</th>
+                <th class="px-3 py-2 border text-left">Not</th>
+                <th class="px-3 py-2 border text-center">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody id="attTableBody" class="bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  MODAL: Öğrenci Ekle / Düzenle                 -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div id="stuModal" class="modal-overlay hidden">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 mx-4">
+      <h3 id="stuModalTitle" class="text-lg font-semibold text-gray-800 mb-4">Yeni Öğrenci Ekle</h3>
+      <form id="stuModalForm" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Öğrenci No (9 hane)</label>
+          <input type="text" id="stuModalRoll" maxlength="9" inputmode="numeric" required
+                 class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Ad Soyad</label>
+          <input type="text" id="stuModalName" required
+                 class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Bölüm</label>
+            <input type="text" id="stuModalSection"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Sınıf No</label>
+            <input type="text" id="stuModalClassRoll"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+        </div>
+        <p id="stuModalError" class="text-red-500 text-xs hidden"></p>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="stuModalCancel"
+                  class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-sm">İptal</button>
+          <button type="submit" id="stuModalSave"
+                  class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!--  MODAL: Yoklama Manuel Ekle / Düzenle           -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <div id="attModal" class="modal-overlay hidden">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 mx-4">
+      <h3 id="attModalTitle" class="text-lg font-semibold text-gray-800 mb-4">Manuel Yoklama Ekle</h3>
+      <form id="attModalForm" class="space-y-3">
+        <div id="attModalRollWrap">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Öğrenci No (9 hane)</label>
+          <input type="text" id="attModalRoll" maxlength="9" inputmode="numeric"
+                 class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <div id="attModalDateWrap">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Tarih</label>
+          <input type="date" id="attModalDate"
+                 class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Durum</label>
+          <select id="attModalStatus"
+                  class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500">
+            <option value="present">Var</option>
+            <option value="absent">Yok</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Not (opsiyonel)</label>
+          <input type="text" id="attModalNote"
+                 class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <p id="attModalError" class="text-red-500 text-xs hidden"></p>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="attModalCancel"
+                  class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-sm">İptal</button>
+          <button type="submit" id="attModalSave"
+                  class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const API = window.location.origin;
+
+    // ═══════════════════════════════════════════════
+    //  AUTH KONTROLÜ (JWT + Legacy)
+    // ═══════════════════════════════════════════════
+    let authMode = "none"; // "jwt" | "legacy" | "none"
+
+    async function checkAuth() {
+      const jwt = localStorage.getItem("adminJwt");
+      const legacyToken = localStorage.getItem("adminToken");
+
+      if (jwt) {
+        try {
+          const res = await fetch(`${API}/api/admin/me`, {
+            headers: { Authorization: `Bearer ${jwt}` },
+          });
+          if (res.ok) {
+            authMode = "jwt";
+            return;
+          }
+        } catch (_) { /* ağ hatası */ }
+        // JWT geçersiz — temizle
+        doLogout();
+        return;
+      }
+
+      if (legacyToken === "Hello@123") {
+        authMode = "legacy";
+        return;
+      }
+
+      // Hiçbiri yok
+      window.location.href = "login.html";
+    }
+
+    function doLogout() {
+      localStorage.removeItem("adminJwt");
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("admin");
+      window.location.href = "login.html";
+    }
+
+    // ═══════════════════════════════════════════════
+    //  adminFetch — gelecek uyumlu helper
+    // ═══════════════════════════════════════════════
+    async function adminFetch(url, options = {}) {
+      const jwt = localStorage.getItem("adminJwt");
+      if (jwt) {
+        options.headers = options.headers || {};
+        options.headers["Authorization"] = `Bearer ${jwt}`;
+      }
+      const res = await fetch(url, options);
+      if (res.status === 401) {
+        doLogout();
+        throw new Error("Oturum süresi doldu.");
+      }
+      return res;
+    }
+
+    // ═══════════════════════════════════════════════
+    //  TOAST (başarı / hata bildirim)
+    // ═══════════════════════════════════════════════
+    function toast(msg, ok) {
+      const el = document.createElement("div");
+      el.className = `toast ${ok ? "toast-success" : "toast-error"}`;
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => { el.remove(); }, ok ? 2500 : 4000);
+    }
+
+    // ═══════════════════════════════════════════════
+    //  YARDIMCILAR
+    // ═══════════════════════════════════════════════
+    function setLoading(btn, loading, label) {
+      btn.disabled = loading;
+      btn.innerHTML = loading
+        ? '<span class="spinner inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-1 align-middle"></span>Yükleniyor…'
+        : label;
+    }
+
+    function formatTime(raw) {
+      if (!raw) return "-";
+      if (typeof raw === "string" && raw.includes("x")) return raw.split("x")[0] + ":00";
+      if (typeof raw === "number") {
+        const s = raw.toString().padStart(4, "0");
+        return s.substring(0, 2) + ":" + s.substring(2);
+      }
+      return raw;
+    }
+
+    function formatDistance(record) {
+      if (record.distanceFromClass != null) return record.distanceFromClass.toFixed(1) + " m";
+      return "-";
+    }
+
+    function emptyRow(cols, msg) {
+      return `<tr><td colspan="${cols}" class="px-3 py-4 border text-center text-gray-400">${msg}</td></tr>`;
+    }
+
+    function tableToCsv(tableBody, headers) {
+      let csv = headers.join(",") + "\r\n";
+      tableBody.querySelectorAll("tr").forEach((row) => {
+        const cells = Array.from(row.querySelectorAll("td"));
+        csv += cells.map((c) => {
+          let t = c.innerText.replace(/"/g, '""');
+          return t.includes(",") ? `"${t}"` : t;
+        }).join(",") + "\r\n";
+      });
+      return csv;
+    }
+
+    function downloadCsv(csvContent, fileName) {
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function todayStr() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    // ═══════════════════════════════════════════════
+    //  SAYFA BAŞLAT
+    // ═══════════════════════════════════════════════
+    checkAuth().then(() => {
+      initPage();
+    });
+
+    function initPage() {
+
+      // ===== Çıkış =====
+      document.getElementById("logoutBtn").addEventListener("click", doLogout);
+
+      // ═══════════════════════════════════════════
+      //  1) TARİHE GÖRE YOKLAMA
+      // ═══════════════════════════════════════════
+      const dateInput = document.getElementById("attendanceDate");
+      dateInput.valueAsDate = new Date();
+
+      document.getElementById("searchDateBtn").addEventListener("click", async () => {
+        const date = dateInput.value;
+        if (!date) return;
+
+        const btn = document.getElementById("searchDateBtn");
+        const resultsDiv = document.getElementById("dateResults");
+        setLoading(btn, true, "Görüntüle");
+
+        try {
+          const res = await fetch(`${API}/api/attendance/by-date?date=${encodeURIComponent(date)}`);
+          if (!res.ok) throw new Error("Veri alınamadı");
+          const { data } = await res.json();
+
+          const dateObj = new Date(date + "T00:00:00");
+          document.getElementById("summaryDate").textContent = dateObj.toLocaleDateString("tr-TR", {
+            weekday: "long", year: "numeric", month: "long", day: "numeric",
+          });
+          document.getElementById("totalPresent").textContent = `${data.length} öğrenci katıldı`;
+
+          const tbody = document.getElementById("dateAttendanceTable");
+          tbody.innerHTML = "";
+
+          if (data.length === 0) {
+            tbody.innerHTML = emptyRow(5, "Bu tarihte yoklama kaydı bulunamadı.");
+          } else {
+            data.forEach((r) => {
+              tbody.insertAdjacentHTML("beforeend", `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2 border">${r.universityRollNo || "-"}</td>
+                  <td class="px-3 py-2 border">${r.name || "-"}</td>
+                  <td class="px-3 py-2 border">${r.section || "-"}</td>
+                  <td class="px-3 py-2 border">${formatTime(r.time)}</td>
+                  <td class="px-3 py-2 border">${formatDistance(r)}</td>
+                </tr>`);
+            });
+          }
+          resultsDiv.classList.remove("hidden");
+        } catch (err) {
+          console.error(err);
+          toast("Yoklama verisi yüklenemedi.", false);
+        } finally {
+          setLoading(btn, false, "Görüntüle");
+        }
+      });
+
+      // CSV: Tarihe göre
+      document.getElementById("downloadDateCsvBtn").addEventListener("click", () => {
+        const tbody = document.getElementById("dateAttendanceTable");
+        const rows = tbody.querySelectorAll("tr td");
+        if (!rows.length) { toast("İndirilecek veri yok.", false); return; }
+        const csv = tableToCsv(tbody, ["Öğrenci No", "Ad Soyad", "Bölüm", "Saat", "Mesafe"]);
+        const date = dateInput.value || "tarih";
+        downloadCsv(csv, `yoklama_tarih_${date}.csv`);
+      });
+
+      // ═══════════════════════════════════════════
+      //  2) ÖĞRENCİ SORGULAMA
+      // ═══════════════════════════════════════════
+      document.getElementById("searchStudentBtn").addEventListener("click", async () => {
+        const rollNo = document.getElementById("studentRollNo").value.trim();
+        const errEl = document.getElementById("studentError");
+        const detailsDiv = document.getElementById("studentDetails");
+        errEl.textContent = "";
+
+        if (!rollNo) { errEl.textContent = "Lütfen öğrenci numarası girin."; return; }
+        if (!/^\d{9}$/.test(rollNo)) { errEl.textContent = "Öğrenci numarası 9 haneli bir sayı olmalıdır."; return; }
+
+        const btn = document.getElementById("searchStudentBtn");
+        setLoading(btn, true, "Sorgula");
+
+        try {
+          const res = await fetch(`${API}/api/students/${encodeURIComponent(rollNo)}/attendance`);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || "Veri alınamadı");
+          }
+          const { data } = await res.json();
+
+          document.getElementById("studentSummary").textContent =
+            `Öğrenci No: ${rollNo}  •  Katılım: ${data.presentDays}/${data.totalClasses}  •  %${data.attendancePercentage}`;
+
+          const tbody = document.getElementById("studentAttendanceTable");
+          tbody.innerHTML = "";
+
+          if (!data.attendanceRecords || data.attendanceRecords.length === 0) {
+            tbody.innerHTML = emptyRow(4, "Bu öğrenci için yoklama kaydı bulunamadı.");
+          } else {
+            data.attendanceRecords.forEach((r) => {
+              const isPresent = r.status === "present";
+              tbody.insertAdjacentHTML("beforeend", `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2 border">${r.date || "-"}</td>
+                  <td class="px-3 py-2 border">${formatTime(r.time)}</td>
+                  <td class="px-3 py-2 border font-medium ${isPresent ? "text-green-600" : "text-red-500"}">${isPresent ? "Var" : "Yok"}</td>
+                  <td class="px-3 py-2 border">${formatDistance(r)}</td>
+                </tr>`);
+            });
+          }
+          detailsDiv.classList.remove("hidden");
+        } catch (err) {
+          console.error(err);
+          errEl.textContent = err.message || "Öğrenci verisi yüklenemedi.";
+          detailsDiv.classList.add("hidden");
+        } finally {
+          setLoading(btn, false, "Sorgula");
+        }
+      });
+
+      document.getElementById("studentRollNo").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("searchStudentBtn").click(); }
+      });
+
+      // ═══════════════════════════════════════════
+      //  3) DEVAMSIZLIK ARALIĞI
+      // ═══════════════════════════════════════════
+      document.getElementById("searchPercentageBtn").addEventListener("click", async () => {
+        const minInput = document.getElementById("minPercentage");
+        const maxInput = document.getElementById("maxPercentage");
+        const errEl = document.getElementById("percentageError");
+        const resultsDiv = document.getElementById("percentageResults");
+        errEl.textContent = "";
+
+        const minVal = parseInt(minInput.value);
+        const maxVal = parseInt(maxInput.value);
+
+        if (minInput.value === "" || maxInput.value === "") {
+          errEl.textContent = "Lütfen hem minimum hem maksimum yüzde girin."; return;
+        }
+        if (isNaN(minVal) || isNaN(maxVal)) {
+          errEl.textContent = "Yüzde değerleri sayı olmalıdır."; return;
+        }
+        if (minVal < 0 || maxVal > 100) {
+          errEl.textContent = "Yüzde 0 ile 100 arasında olmalıdır."; return;
+        }
+        if (minVal > maxVal) {
+          errEl.textContent = "Minimum yüzde, maksimumdan büyük olamaz."; return;
+        }
+
+        const btn = document.getElementById("searchPercentageBtn");
+        setLoading(btn, true, "Ara");
+        resultsDiv.classList.add("hidden");
+
+        try {
+          const res = await fetch(`${API}/api/students/by-attendance-range?min=${minVal}&max=${maxVal}`);
+          if (!res.ok) throw new Error("Veri alınamadı");
+          const { data: students } = await res.json();
+
+          document.getElementById("percentageRange").textContent = `%${minVal} — %${maxVal}`;
+          document.getElementById("totalStudentsCount").textContent = `${students.length} öğrenci`;
+
+          const tbody = document.getElementById("percentageResultsTable");
+          tbody.innerHTML = "";
+
+          if (students.length === 0) {
+            tbody.innerHTML = emptyRow(5, "Bu aralıkta öğrenci bulunamadı.");
+          } else {
+            students.forEach((s) => {
+              tbody.insertAdjacentHTML("beforeend", `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2 border">${s.universityRollNo || "-"}</td>
+                  <td class="px-3 py-2 border">${s.name || "-"}</td>
+                  <td class="px-3 py-2 border">${s.section || "-"}</td>
+                  <td class="px-3 py-2 border font-medium">%${s.attendancePercentage}</td>
+                  <td class="px-3 py-2 border">${s.presentDays}/${s.totalClasses}</td>
+                </tr>`);
+            });
+          }
+          resultsDiv.classList.remove("hidden");
+        } catch (err) {
+          console.error(err);
+          errEl.textContent = "Veri yüklenemedi. Lütfen tekrar deneyin.";
+        } finally {
+          setLoading(btn, false, "Ara");
+        }
+      });
+
+      // CSV: Devamsızlık aralığı
+      document.getElementById("downloadPercentageCsvBtn").addEventListener("click", () => {
+        const tbody = document.getElementById("percentageResultsTable");
+        const rows = tbody.querySelectorAll("tr td");
+        if (!rows.length) { toast("İndirilecek veri yok.", false); return; }
+        const csv = tableToCsv(tbody, ["Öğrenci No", "Ad Soyad", "Bölüm", "Katılım %", "Katılım"]);
+        const min = document.getElementById("minPercentage").value || "0";
+        const max = document.getElementById("maxPercentage").value || "100";
+        downloadCsv(csv, `devamsizlik_${min}-${max}.csv`);
+      });
+
+      // ═══════════════════════════════════════════
+      //  4) ÖĞRENCİ YÖNETİMİ (CRUD)
+      // ═══════════════════════════════════════════
+      const stuPanel = document.getElementById("studentPanel");
+      const stuArrow = document.getElementById("studentPanelArrow");
+
+      async function loadSections() {
+        try {
+          const sel = document.getElementById("stuSectionFilter");
+          const current = sel.value;
+          const res = await adminFetch(`${API}/api/admin/students/sections`);
+          const json = await res.json();
+          if (!res.ok) return;
+          sel.innerHTML = '<option value="">Tümü</option>';
+          (json.data || []).forEach((s) => {
+            const opt = document.createElement("option");
+            opt.value = s;
+            opt.textContent = s;
+            if (s === current) opt.selected = true;
+            sel.appendChild(opt);
+          });
+        } catch (_) { /* sessizce geç */ }
+      }
+
+      document.getElementById("toggleStudentPanel").addEventListener("click", () => {
+        const open = stuPanel.classList.toggle("hidden");
+        stuArrow.style.transform = open ? "" : "rotate(180deg)";
+        if (!open) { loadSections(); loadStudents(); }
+      });
+
+      document.getElementById("stuSectionFilter").addEventListener("change", loadStudents);
+
+      async function loadStudents() {
+        const search = document.getElementById("stuSearch").value.trim();
+        const section = document.getElementById("stuSectionFilter").value.trim();
+        const btn = document.getElementById("stuRefreshBtn");
+        setLoading(btn, true, "Yenile");
+
+        try {
+          const params = new URLSearchParams({ page: "1", limit: "200" });
+          if (search) params.set("query", search);
+          if (section) params.set("section", section);
+
+          const res = await adminFetch(`${API}/api/admin/students?${params}`);
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "Hata");
+
+          const students = json.data;
+          const total = json.pagination?.total || students.length;
+          document.getElementById("stuTotal").textContent = `Toplam ${total} kayıt`;
+
+          const tbody = document.getElementById("stuTableBody");
+          tbody.innerHTML = "";
+
+          if (students.length === 0) {
+            tbody.innerHTML = emptyRow(5, "Kayıt bulunamadı.");
+          } else {
+            students.forEach((s) => {
+              const esc = (str) => (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+              tbody.insertAdjacentHTML("beforeend", `
+                <tr class="hover:bg-gray-50" data-roll="${esc(s.universityRollNo)}">
+                  <td class="px-3 py-2 border font-mono">${esc(s.universityRollNo)}</td>
+                  <td class="px-3 py-2 border">${esc(s.name)}</td>
+                  <td class="px-3 py-2 border">${esc(s.section)}</td>
+                  <td class="px-3 py-2 border">${esc(s.classRollNo)}</td>
+                  <td class="px-3 py-2 border text-center space-x-1">
+                    <button data-action="edit" data-rollno="${esc(s.universityRollNo)}"
+                            class="text-primary-600 hover:underline text-xs font-medium">Düzenle</button>
+                    <button data-action="delete" data-rollno="${esc(s.universityRollNo)}"
+                            class="text-red-500 hover:underline text-xs font-medium">Sil</button>
+                  </td>
+                </tr>`);
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          toast("Öğrenci listesi yüklenemedi: " + err.message, false);
+        } finally {
+          setLoading(btn, false, "Yenile");
+        }
+      }
+
+      document.getElementById("stuRefreshBtn").addEventListener("click", loadStudents);
+      document.getElementById("stuSearch").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); loadStudents(); }
+      });
+
+      // CSV öğrenci
+      document.getElementById("stuCsvBtn").addEventListener("click", () => {
+        const tbody = document.getElementById("stuTableBody");
+        if (!tbody.querySelectorAll("tr td").length) { toast("İndirilecek veri yok.", false); return; }
+        const csv = tableToCsv(tbody, ["Öğrenci No", "Ad Soyad", "Bölüm", "Sınıf No", "İşlemler"]);
+        downloadCsv(csv, `ogrenciler_${todayStr()}.csv`);
+      });
+
+      // — Öğrenci Modal —
+      const stuModal      = document.getElementById("stuModal");
+      const stuModalTitle  = document.getElementById("stuModalTitle");
+      const stuModalForm   = document.getElementById("stuModalForm");
+      const stuModalRoll   = document.getElementById("stuModalRoll");
+      const stuModalName   = document.getElementById("stuModalName");
+      const stuModalSection    = document.getElementById("stuModalSection");
+      const stuModalClassRoll  = document.getElementById("stuModalClassRoll");
+      const stuModalError  = document.getElementById("stuModalError");
+      const stuModalSave   = document.getElementById("stuModalSave");
+      let stuEditingRoll = null; // null = yeni, string = düzenleme
+
+      function openStuModal(editRoll) {
+        stuEditingRoll = editRoll || null;
+        stuModalError.classList.add("hidden");
+        stuModalForm.reset();
+
+        if (stuEditingRoll) {
+          stuModalTitle.textContent = "Öğrenci Düzenle";
+          stuModalRoll.disabled = true;
+          // mevcut değerleri doldur
+          const row = document.querySelector(`tr[data-roll="${stuEditingRoll}"]`);
+          if (row) {
+            const cells = row.querySelectorAll("td");
+            stuModalRoll.value = cells[0].textContent.trim();
+            stuModalName.value = cells[1].textContent.trim();
+            stuModalSection.value = cells[2].textContent.trim();
+            stuModalClassRoll.value = cells[3].textContent.trim();
+          }
+        } else {
+          stuModalTitle.textContent = "Yeni Öğrenci Ekle";
+          stuModalRoll.disabled = false;
+        }
+        stuModal.classList.remove("hidden");
+      }
+
+      document.getElementById("stuNewBtn").addEventListener("click", () => openStuModal(null));
+      document.getElementById("stuModalCancel").addEventListener("click", () => stuModal.classList.add("hidden"));
+      stuModal.addEventListener("click", (e) => { if (e.target === stuModal) stuModal.classList.add("hidden"); });
+
+      stuModalForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        stuModalError.classList.add("hidden");
+        const roll = stuModalRoll.value.trim();
+        const name = stuModalName.value.trim();
+        const section = stuModalSection.value.trim();
+        const classRollNo = stuModalClassRoll.value.trim();
+
+        if (!roll || !/^\d{9}$/.test(roll)) {
+          stuModalError.textContent = "Öğrenci numarası 9 haneli olmalıdır.";
+          stuModalError.classList.remove("hidden"); return;
+        }
+        if (!name) {
+          stuModalError.textContent = "Ad soyad zorunludur.";
+          stuModalError.classList.remove("hidden"); return;
+        }
+
+        setLoading(stuModalSave, true, "Kaydet");
+
+        try {
+          let res;
+          if (stuEditingRoll) {
+            // PUT
+            res = await adminFetch(`${API}/api/admin/students/${stuEditingRoll}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name, section, classRollNo }),
+            });
+          } else {
+            // POST
+            res = await adminFetch(`${API}/api/admin/students`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ universityRollNo: roll, name, section, classRollNo }),
+            });
+          }
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "İşlem başarısız");
+
+          toast(stuEditingRoll ? "Öğrenci güncellendi." : "Öğrenci eklendi.", true);
+          stuModal.classList.add("hidden");
+          loadSections(); loadStudents();
+        } catch (err) {
+          stuModalError.textContent = err.message;
+          stuModalError.classList.remove("hidden");
+        } finally {
+          setLoading(stuModalSave, false, "Kaydet");
+        }
+      });
+
+      // ═══════════════════════════════════════════
+      //  EVENT DELEGATION: Öğrenci Düzenle / Sil
+      // ═══════════════════════════════════════════
+      document.getElementById("stuTableBody").addEventListener("click", async (e) => {
+        const btn = e.target.closest("button[data-action]");
+        if (!btn) return;
+
+        const action = btn.dataset.action;
+        const rollNo = btn.dataset.rollno;
+        if (!rollNo) return;
+
+        if (action === "edit") {
+          openStuModal(rollNo);
+        } else if (action === "delete") {
+          if (!confirm(`${rollNo} numaralı öğrenciyi silmek istediğinize emin misiniz?`)) return;
+          try {
+            const res = await adminFetch(`${API}/api/admin/students/${rollNo}`, { method: "DELETE" });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.message || "Silinemedi");
+            toast("Öğrenci silindi.", true);
+            loadSections(); loadStudents();
+          } catch (err) {
+            console.error("Silme hatası:", err);
+            toast("Silme hatası: " + err.message, false);
+          }
+        }
+      });
+
+      // ═══════════════════════════════════════════
+      //  CSV IMPORT
+      // ═══════════════════════════════════════════
+
+      // Legacy modda CSV alanını disable yap
+      if (authMode === "legacy") {
+        document.getElementById("csvFileInput").disabled = true;
+        document.getElementById("csvUploadBtn").disabled = true;
+        document.getElementById("stuNewBtn").disabled = true;
+        document.getElementById("csvLegacyWarn").classList.remove("hidden");
+      }
+
+      // Şablon indir
+      document.getElementById("csvTemplateLink").addEventListener("click", (e) => {
+        e.preventDefault();
+        const tpl = "universityRollNo,name,section\n123456789,Ali Veli,Gıda\n";
+        downloadCsv(tpl, "ogrenci_sablonu.csv");
+      });
+
+      // CSV Yükle
+      const csvUploadBtn = document.getElementById("csvUploadBtn");
+      const csvFileInput = document.getElementById("csvFileInput");
+      const csvResultCard = document.getElementById("csvResultCard");
+
+      csvUploadBtn.addEventListener("click", async () => {
+        const file = csvFileInput.files[0];
+        if (!file) { toast("Lütfen bir CSV dosyası seçin.", false); return; }
+
+        if (authMode !== "jwt") {
+          toast("CSV import için JWT ile giriş yapmalısınız.", false);
+          return;
+        }
+
+        setLoading(csvUploadBtn, true, "Yükle");
+        csvResultCard.classList.add("hidden");
+
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+
+          const res = await adminFetch(`${API}/api/admin/students/import`, {
+            method: "POST",
+            body: fd,
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "Yükleme başarısız");
+
+          const s = json.summary;
+          document.getElementById("csvResTotal").textContent = `Toplam: ${s.total}`;
+          document.getElementById("csvResInserted").textContent = `Eklenen: ${s.inserted}`;
+          document.getElementById("csvResUpdated").textContent = `Güncellenen: ${s.updated}`;
+          document.getElementById("csvResErrors").textContent = `Hatalı: ${s.errors}`;
+
+          const errList = json.errors || [];
+          const errListDiv = document.getElementById("csvErrorList");
+          const errTableDiv = document.getElementById("csvErrorTable");
+
+          if (errList.length > 0) {
+            let html = '<table class="w-full"><thead><tr><th class="text-left px-1">Satır</th><th class="text-left px-1">No</th><th class="text-left px-1">Sebep</th></tr></thead><tbody>';
+            errList.slice(0, 20).forEach((e) => {
+              html += `<tr><td class="px-1 border">${e.row}</td><td class="px-1 border">${e.universityRollNo || "-"}</td><td class="px-1 border">${e.reason}</td></tr>`;
+            });
+            if (errList.length > 20) html += `<tr><td colspan="3" class="px-1 text-gray-400">…ve ${errList.length - 20} satır daha</td></tr>`;
+            html += '</tbody></table>';
+            errTableDiv.innerHTML = html;
+            errListDiv.classList.remove("hidden");
+
+            // Hata CSV indir
+            document.getElementById("csvErrorDownload").onclick = () => {
+              let csv = "Satır,Öğrenci No,Sebep\r\n";
+              errList.forEach((e) => {
+                csv += `${e.row},${e.universityRollNo || ""},"${(e.reason || "").replace(/"/g, '""')}"\r\n`;
+              });
+              downloadCsv(csv, `import_hatalar_${todayStr()}.csv`);
+            };
+          } else {
+            errListDiv.classList.add("hidden");
+          }
+
+          csvResultCard.classList.remove("hidden");
+          toast(`Import tamamlandı: ${s.inserted} eklendi, ${s.updated} güncellendi.`, true);
+          csvFileInput.value = "";
+          loadSections(); loadStudents();
+        } catch (err) {
+          console.error("CSV import hatası:", err);
+          toast("CSV import hatası: " + err.message, false);
+        } finally {
+          setLoading(csvUploadBtn, false, "Yükle");
+        }
+      });
+
+      // ═══════════════════════════════════════════
+      //  5) YOKLAMA YÖNETİMİ (CRUD)
+      // ═══════════════════════════════════════════
+      const attPanel = document.getElementById("attPanel");
+      const attArrow = document.getElementById("attPanelArrow");
+      document.getElementById("toggleAttPanel").addEventListener("click", () => {
+        const open = attPanel.classList.toggle("hidden");
+        attArrow.style.transform = open ? "" : "rotate(180deg)";
+      });
+
+      async function loadAttendance() {
+        const date   = document.getElementById("attDateFilter").value;
+        const rollNo = document.getElementById("attRollFilter").value.trim();
+        const status = document.getElementById("attStatusFilter").value;
+        const btn    = document.getElementById("attListBtn");
+        setLoading(btn, true, "Listele");
+
+        try {
+          const params = new URLSearchParams({ page: "1", limit: "200" });
+          if (date)   params.set("date", date);
+          if (rollNo) params.set("rollNo", rollNo);
+          if (status) params.set("status", status);
+
+          const res = await adminFetch(`${API}/api/admin/attendance?${params}`);
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "Hata");
+
+          const records = json.data;
+          const total = json.pagination?.total || records.length;
+          document.getElementById("attTotal").textContent = `Toplam ${total} kayıt`;
+
+          const tbody = document.getElementById("attTableBody");
+          tbody.innerHTML = "";
+
+          if (records.length === 0) {
+            tbody.innerHTML = emptyRow(10, "Kayıt bulunamadı.");
+          } else {
+            records.forEach((r) => {
+              const isPresent = r.status === "present";
+              const escAttr = (str) => (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+              tbody.insertAdjacentHTML("beforeend", `
+                <tr class="hover:bg-gray-50" data-id="${r._id}">
+                  <td class="px-3 py-2 border">${r.date || "-"}</td>
+                  <td class="px-3 py-2 border">${formatTime(r.time)}</td>
+                  <td class="px-3 py-2 border font-mono">${r.universityRollNo || "-"}</td>
+                  <td class="px-3 py-2 border">${r.name || "-"}</td>
+                  <td class="px-3 py-2 border">${r.section || "-"}</td>
+                  <td class="px-3 py-2 border font-medium ${isPresent ? "text-green-600" : "text-red-500"}">${isPresent ? "Var" : "Yok"}</td>
+                  <td class="px-3 py-2 border">${formatDistance(r)}</td>
+                  <td class="px-3 py-2 border text-center">${r.manual ? '<span class="bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded">Manuel</span>' : "-"}</td>
+                  <td class="px-3 py-2 border text-xs">${r.note || "-"}</td>
+                  <td class="px-3 py-2 border text-center space-x-1">
+                    <button data-action="att-edit" data-id="${r._id}" data-status="${escAttr(r.status)}" data-note="${escAttr(r.note)}"
+                            class="text-primary-600 hover:underline text-xs font-medium">Düzenle</button>
+                    <button data-action="att-delete" data-id="${r._id}"
+                            class="text-red-500 hover:underline text-xs font-medium">Sil</button>
+                  </td>
+                </tr>`);
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          toast("Yoklama listesi yüklenemedi: " + err.message, false);
+        } finally {
+          setLoading(btn, false, "Listele");
+        }
+      }
+
+      document.getElementById("attListBtn").addEventListener("click", loadAttendance);
+
+      // — Yoklama Modal —
+      const attModal      = document.getElementById("attModal");
+      const attModalTitle = document.getElementById("attModalTitle");
+      const attModalForm  = document.getElementById("attModalForm");
+      const attModalRoll  = document.getElementById("attModalRoll");
+      const attModalDate  = document.getElementById("attModalDate");
+      const attModalStatus = document.getElementById("attModalStatus");
+      const attModalNote  = document.getElementById("attModalNote");
+      const attModalError = document.getElementById("attModalError");
+      const attModalSave  = document.getElementById("attModalSave");
+      const attModalRollWrap = document.getElementById("attModalRollWrap");
+      const attModalDateWrap = document.getElementById("attModalDateWrap");
+      let attEditingId = null;
+
+      function openAttModal(editId, currentStatus, currentNote) {
+        attEditingId = editId || null;
+        attModalError.classList.add("hidden");
+        attModalForm.reset();
+
+        if (attEditingId) {
+          attModalTitle.textContent = "Yoklama Düzenle";
+          attModalRollWrap.classList.add("hidden");
+          attModalDateWrap.classList.add("hidden");
+          attModalStatus.value = currentStatus || "present";
+          attModalNote.value = currentNote || "";
+        } else {
+          attModalTitle.textContent = "Manuel Yoklama Ekle";
+          attModalRollWrap.classList.remove("hidden");
+          attModalDateWrap.classList.remove("hidden");
+          attModalDate.value = todayStr();
+        }
+        attModal.classList.remove("hidden");
+      }
+
+      document.getElementById("attManualBtn").addEventListener("click", () => openAttModal(null));
+      document.getElementById("attModalCancel").addEventListener("click", () => attModal.classList.add("hidden"));
+      attModal.addEventListener("click", (e) => { if (e.target === attModal) attModal.classList.add("hidden"); });
+
+      attModalForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        attModalError.classList.add("hidden");
+        setLoading(attModalSave, true, "Kaydet");
+
+        try {
+          let res;
+          if (attEditingId) {
+            // PUT — sadece status + note
+            res = await adminFetch(`${API}/api/admin/attendance/${attEditingId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                status: attModalStatus.value,
+                note: attModalNote.value.trim() || undefined,
+              }),
+            });
+          } else {
+            // POST manual
+            const roll = attModalRoll.value.trim();
+            const date = attModalDate.value;
+            if (!roll || !/^\d{9}$/.test(roll)) {
+              attModalError.textContent = "Öğrenci numarası 9 haneli olmalıdır.";
+              attModalError.classList.remove("hidden");
+              setLoading(attModalSave, false, "Kaydet"); return;
+            }
+            if (!date) {
+              attModalError.textContent = "Tarih zorunludur.";
+              attModalError.classList.remove("hidden");
+              setLoading(attModalSave, false, "Kaydet"); return;
+            }
+            res = await adminFetch(`${API}/api/admin/attendance/manual`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                universityRollNo: roll,
+                date,
+                status: attModalStatus.value,
+                note: attModalNote.value.trim() || undefined,
+              }),
+            });
+          }
+
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "İşlem başarısız");
+
+          toast(attEditingId ? "Yoklama güncellendi." : "Manuel yoklama eklendi.", true);
+          attModal.classList.add("hidden");
+          loadAttendance();
+        } catch (err) {
+          attModalError.textContent = err.message;
+          attModalError.classList.remove("hidden");
+        } finally {
+          setLoading(attModalSave, false, "Kaydet");
+        }
+      });
+
+      // ═══════════════════════════════════════════
+      //  EVENT DELEGATION: Yoklama Düzenle / Sil
+      // ═══════════════════════════════════════════
+      document.getElementById("attTableBody").addEventListener("click", async (e) => {
+        const btn = e.target.closest("button[data-action]");
+        if (!btn) return;
+
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (!id) return;
+
+        if (action === "att-edit") {
+          openAttModal(id, btn.dataset.status || "present", btn.dataset.note || "");
+        } else if (action === "att-delete") {
+          if (!confirm("Bu yoklama kaydını silmek istediğinize emin misiniz?")) return;
+          try {
+            const res = await adminFetch(`${API}/api/admin/attendance/${id}`, { method: "DELETE" });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.message || "Silinemedi");
+            toast("Yoklama kaydı silindi.", true);
+            loadAttendance();
+          } catch (err) {
+            console.error("Silme hatası:", err);
+            toast("Silme hatası: " + err.message, false);
+          }
+        }
+      });
+
+    } // end initPage
+
+  })();
+  </script>
+</body>
+</html>
