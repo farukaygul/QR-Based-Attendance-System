@@ -32,11 +32,12 @@
             <!-- Logo ve Başlık -->
             <div class="text-center mb-6">
                 <img src="/logo2.png" alt="Üniversite Logosu" class="h-20 mx-auto mb-3" />
-                <h1 class="text-xl font-bold text-gray-800">Suluova Meslek Yüksekokulu</h1>
-                <p class="text-sm text-gray-500 mt-1">Yapay Zeka Okuryazarlığı Dersi Yoklaması</p>
+                <h1 id="indexOrgTitle" class="text-xl font-bold text-gray-800">Suluova Meslek Yüksekokulu</h1>
+                <p id="indexCourseTitle" class="text-sm text-gray-500 mt-1">Yapay Zeka Okuryazarlığı Dersi Yoklaması</p>
+                <p id="indexSessionTitle" class="text-xs text-primary-600 font-medium mt-1 hidden"></p>
             </div>
 
-            <!-- ADIM 1: Öğrenci Numarası -->
+            <!-- ADIM 1: Öğrenci Numarası (whitelist modu) -->
             <div id="step1" class="space-y-4">
                 <div>
                     <label for="universityRollNo" class="block text-sm font-medium text-gray-700 mb-1">Öğrenci Numarası</label>
@@ -49,6 +50,33 @@
                     Bilgilerimi Getir
                 </button>
                 <div id="fetchError" class="text-sm text-center text-red-600 font-medium hidden"></div>
+            </div>
+
+            <!-- ADIM 1-OPEN: Ad Soyad + opsiyonel Öğrenci No (open modu) -->
+            <div id="step1Open" class="hidden space-y-4">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700 mb-1">
+                    <p class="font-semibold" id="openSessionTitle"></p>
+                    <p class="text-xs text-blue-500">Açık oturum — kayıt olmadan katılabilirsiniz.</p>
+                </div>
+                <div>
+                    <label for="openName" class="block text-sm font-medium text-gray-700 mb-1">Ad Soyad <span class="text-red-500">*</span></label>
+                    <input type="text" id="openName" placeholder="Adınızı ve soyadınızı girin" required
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                </div>
+                <div>
+                    <label for="openRollNo" class="block text-sm font-medium text-gray-700 mb-1">Öğrenci Numarası <span class="text-xs text-gray-400">(opsiyonel)</span></label>
+                    <input type="text" id="openRollNo" placeholder="Öğrenci No (opsiyonel)"
+                        inputmode="numeric" maxlength="9"
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                </div>
+                <button id="openSubmitBtn" type="button"
+                    class="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Yoklamayı Gönder
+                </button>
+                <div id="openError" class="text-sm text-center text-red-600 font-medium hidden"></div>
             </div>
 
             <!-- ADIM 2: Bilgi Onayı + Gönder -->

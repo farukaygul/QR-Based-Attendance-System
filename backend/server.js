@@ -135,6 +135,45 @@ const qrLimiter = rateLimit({
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/admin", adminRoutes);
 
+// Public settings (auth yok — UI başlıkları için)
+app.get("/api/public/settings", async (_req, res) => {
+  try {
+    const settings = await Settings.getSettings();
+    res.json({
+      status: "success",
+      data: {
+        orgTitle: settings.orgTitle,
+        courseTitle: settings.courseTitle,
+        requireLocation: settings.requireLocation,
+        classLat: settings.classLat,
+        classLng: settings.classLng,
+        radiusMeters: settings.radiusMeters,
+      },
+    });
+  } catch (error) {
+    console.error("Public settings error:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+});
+
+// Public session info (auth yok — UI policy belirlemek için)
+app.get("/api/sessions/:id/public", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ status: "error", message: "Geçersiz oturum ID." });
+    }
+    const sess = await Session.findById(id).select("_id title policy requireLocation expiresAt endAt").lean();
+    if (!sess) {
+      return res.status(404).json({ status: "error", message: "Oturum bulunamadı." });
+    }
+    res.json({ status: "success", data: sess });
+  } catch (error) {
+    console.error("Public session error:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+});
+
 // Get student info by roll number
 app.get("/api/students/:rollNo", async (req, res) => {
   try {

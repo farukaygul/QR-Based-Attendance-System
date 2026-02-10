@@ -1,4 +1,4 @@
-// --- Session ID ---
+// --- Session ID & QR Token ---
 function getSessionId() {
   const hashParams = new URLSearchParams(window.location.hash.substring(1));
   const hashSession = hashParams.get("sessionId");
@@ -6,7 +6,15 @@ function getSessionId() {
   const urlParams = new URLSearchParams(window.location.search);
   return urlParams.get("sessionId");
 }
+function getQrToken() {
+  const hashParams = new URLSearchParams(window.location.hash.substring(1));
+  const hashToken = hashParams.get("qrToken");
+  if (hashToken) return hashToken;
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get("qrToken");
+}
 const sessionId = getSessionId();
+const qrToken = getQrToken();
 
 // --- Device Fingerprint ---
 async function generateDeviceFingerprint() {
@@ -68,6 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Elements
   const step1 = document.getElementById("step1");
+  const step1Open = document.getElementById("step1Open");
   const step2 = document.getElementById("step2");
   const rollInput = document.getElementById("universityRollNo");
   const fetchBtn = document.getElementById("fetchStudentBtn");
@@ -81,6 +90,138 @@ document.addEventListener("DOMContentLoaded", () => {
   const submitBtn = form ? form.querySelector("button[type='submit']") : null;
 
   let isSubmitting = false;
+  let sessionPolicy = "whitelist"; // varsayılan
+
+  // --- Public settings — başlıkları yükle ---
+  fetch(`${API}/api/public/settings`)
+    .then((r) => r.json())
+    .then((json) => {
+      if (json.status === "success" && json.data) {
+        const orgEl = document.getElementById("indexOrgTitle");
+        const courseEl = document.getElementById("indexCourseTitle");
+        if (orgEl && json.data.orgTitle) orgEl.textContent = json.data.orgTitle;
+        if (courseEl && json.data.courseTitle) courseEl.textContent = json.data.courseTitle + " Dersi Yoklaması";
+      }
+    })
+    .catch(() => { /* fallback: hardcode değerler kalır */ });
+
+  // --- Session policy algıla ---
+  if (sessionId) {
+    fetch(`${API}/api/sessions/${encodeURIComponent(sessionId)}/public`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.status === "success" && json.data) {
+          sessionPolicy = json.data.policy || "whitelist";
+
+          // Oturum başlığını göster
+          const sessTitleEl = document.getElementById("indexSessionTitle");
+          if (sessTitleEl && json.data.title) {
+            sessTitleEl.textContent = "Oturum: " + json.data.title;
+            sessTitleEl.classList.remove("hidden");
+          }
+
+          if (sessionPolicy === "open") {
+            // Whitelist formunu gizle, open formu göster
+            step1.classList.add("hidden");
+            if (step1Open) {
+              step1Open.classList.remove("hidden");
+              const titleEl = document.getElementById("openSessionTitle");
+              if (titleEl) titleEl.textContent = json.data.title || "Açık Oturum";
+            }
+          }
+        }
+      })
+      .catch(() => { /* sessizce whitelist'te kal */ });
+  }
+
+  // --- OPEN MOD: Yoklama gönder ---
+  const openSubmitBtn = document.getElementById("openSubmitBtn");
+  if (openSubmitBtn) {
+    openSubmitBtn.addEventListener("click", async () => {
+      if (isSubmitting) return;
+      const openError = document.getElementById("openError");
+      openError.classList.add("hidden");
+
+      const nameVal = document.getElementById("openName").value.trim();
+      const rollVal = document.getElementById("openRollNo").value.trim();
+
+      if (!nameVal) {
+        openError.textContent = "Ad soyad zorunludur.";
+        openError.classList.remove("hidden");
+        return;
+      }
+
+      // Öğrenci no girilmişse 9 hane mi kontrol et
+      if (rollVal && !/^\d{9}$/.test(rollVal)) {
+        openError.textContent = "Öğrenci numarası girilecekse 9 haneli bir sayı olmalıdır.";
+        openError.classList.remove("hidden");
+        return;
+      }
+
+      if (!sessionId) {
+        openError.textContent = "Lütfen önce QR kodu tarayın.";
+        openError.classList.remove("hidden");
+        return;
+      }
+
+      isSubmitting = true;
+      openSubmitBtn.disabled = true;
+      openSubmitBtn.innerHTML = "Gönderiliyor...";
+
+      try {
+        const fingerprint = await generateDeviceFingerprint();
+
+        // Konum al
+        const loc = await new Promise((resolve, reject) => {
+          if (!navigator.geolocation) { resolve(null); return; }
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => resolve(null),
+            { timeout: 10000, enableHighAccuracy: true }
+          );
+        });
+
+        const payload = {
+          universityRollNo: rollVal || ("9" + Date.now().toString().slice(-8)),
+          name: nameVal,
+          sessionId,
+          deviceFingerprint: fingerprint,
+        };
+        if (qrToken) payload.qrToken = qrToken;
+        if (loc) payload.location = loc;
+
+        const res = await fetch(`${API}/mark-attendance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        if (res.status === 400 && data.message?.includes("zaten")) {
+          statusEl.innerText = data.message;
+          statusEl.className = "text-center mt-6 text-sm text-yellow-600";
+          return;
+        }
+
+        if (!res.ok) throw new Error(data.message || "Yoklama kaydedilemedi");
+
+        statusEl.innerText = "Yoklama başarıyla kaydedildi!";
+        statusEl.className = "text-center mt-6 text-sm text-green-600";
+        if (rollVal) {
+          setTimeout(() => {
+            window.location.href = `/dashboard.html?rollNo=${encodeURIComponent(rollVal)}`;
+          }, 1500);
+        }
+      } catch (err) {
+        openError.textContent = err.message;
+        openError.classList.remove("hidden");
+      } finally {
+        isSubmitting = false;
+        openSubmitBtn.disabled = false;
+        openSubmitBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>Yoklamayı Gönder`;
+      }
+    });
+  }
 
   // --- ADIM 1: Bilgileri Getir ---
   fetchBtn.addEventListener("click", async () => {
@@ -201,6 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
             deviceFingerprint: fingerprint,
             sessionId,
           };
+          if (qrToken) payload.qrToken = qrToken;
 
           try {
             const res = await fetch(`${API}/mark-attendance`, {
