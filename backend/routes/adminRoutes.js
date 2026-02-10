@@ -621,7 +621,7 @@ router.post("/attendance/manual", requireAdminAuth, async (req, res) => {
       });
     }
 
-    // Session var mı?
+    // Session var mı ve aktif mi?
     const sess = await Session.findById(sessionId);
     if (!sess) {
       return res.status(400).json({
@@ -629,14 +629,54 @@ router.post("/attendance/manual", requireAdminAuth, async (req, res) => {
         message: "Oturum bulunamadı. Geçerli bir oturum ID gönderin.",
       });
     }
-
-    // Öğrenci DB'de olmalı
-    const student = await User.findOne({ universityRollNo });
-    if (!student) {
+    if (sess.endAt !== null && sess.endAt !== undefined) {
       return res.status(400).json({
         status: "error",
-        message: "Öğrenci sistemde kayıtlı değil. Önce öğrenciyi ekleyin.",
+        message: "Oturum aktif değil (kapatılmış).",
       });
+    }
+    if (sess.expiresAt <= new Date()) {
+      return res.status(400).json({
+        status: "error",
+        message: "Oturum aktif değil (süresi dolmuş).",
+      });
+    }
+
+    // Policy kontrolü
+    let attName = "";
+    let attSection = "";
+    let attClassRollNo = "";
+    let attStudentId = null;
+
+    const student = await User.findOne({ universityRollNo });
+
+    if (sess.policy === "whitelist") {
+      if (!student) {
+        return res.status(400).json({
+          status: "error",
+          message: "Öğrenci sistemde kayıtlı değil. Önce öğrenciyi ekleyin.",
+        });
+      }
+      attName = student.name;
+      attSection = student.section || "";
+      attClassRollNo = student.classRollNo || "";
+      attStudentId = student._id;
+    } else {
+      // open policy
+      if (student) {
+        attName = student.name;
+        attSection = student.section || "";
+        attClassRollNo = student.classRollNo || "";
+        attStudentId = student._id;
+      } else {
+        if (!req.body.name || !req.body.name.trim()) {
+          return res.status(400).json({
+            status: "error",
+            message: "Open oturumda isim (name) zorunludur.",
+          });
+        }
+        attName = req.body.name.trim();
+      }
     }
 
     // Aynı session + aynı öğrenci kontrolü
@@ -650,16 +690,17 @@ router.post("/attendance/manual", requireAdminAuth, async (req, res) => {
 
     const record = await Attendance.create({
       sessionId,
-      name: student.name,
-      universityRollNo: student.universityRollNo,
-      section: student.section,
-      classRollNo: student.classRollNo,
+      name: attName,
+      universityRollNo,
+      section: attSection,
+      classRollNo: attClassRollNo,
       date,
       time: time || new Date().toLocaleTimeString("tr-TR", { hour12: false }),
       status,
-      studentId: student._id,
+      studentId: attStudentId || undefined,
       manual: true,
       note: note || undefined,
+      distanceFromClass: null,
     });
 
     res.status(201).json({ status: "success", data: record });
