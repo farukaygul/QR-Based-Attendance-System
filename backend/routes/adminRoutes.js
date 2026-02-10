@@ -7,6 +7,8 @@ const { parse } = require("csv-parse/sync");
 const { requireAdminAuth } = require("../middleware/adminAuth");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
+const Session = require("../models/Session");
+const Settings = require("../models/Settings");
 
 // Multer: memory storage, sadece .csv, max 2MB
 const csvUpload = multer({
@@ -90,6 +92,124 @@ router.post("/login", adminLoginLimiter, (req, res) => {
 // GET /api/admin/me
 router.get("/me", requireAdminAuth, (_req, res) => {
   res.json({ status: "success", data: { role: "admin" } });
+});
+
+// ═══════════════════════════════════════════════════
+//  SETTINGS (singleton)
+// ═══════════════════════════════════════════════════
+
+// GET /api/admin/settings
+router.get("/settings", requireAdminAuth, async (_req, res) => {
+  try {
+    const settings = await Settings.getSettings();
+    res.json({ status: "success", data: settings });
+  } catch (error) {
+    console.error("Admin settings get hatası:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+});
+
+// PUT /api/admin/settings
+router.put("/settings", requireAdminAuth, async (req, res) => {
+  try {
+    const { orgTitle, courseTitle, requireLocation, classLat, classLng, radiusMeters } = req.body;
+    const update = {};
+
+    if (orgTitle !== undefined) update.orgTitle = String(orgTitle).trim();
+    if (courseTitle !== undefined) update.courseTitle = String(courseTitle).trim();
+    if (requireLocation !== undefined) update.requireLocation = Boolean(requireLocation);
+
+    if (classLat !== undefined) {
+      const lat = parseFloat(classLat);
+      if (isNaN(lat)) return res.status(400).json({ status: "error", message: "classLat sayısal olmalıdır." });
+      update.classLat = lat;
+    }
+    if (classLng !== undefined) {
+      const lng = parseFloat(classLng);
+      if (isNaN(lng)) return res.status(400).json({ status: "error", message: "classLng sayısal olmalıdır." });
+      update.classLng = lng;
+    }
+    if (radiusMeters !== undefined) {
+      const r = parseFloat(radiusMeters);
+      if (isNaN(r) || r < 0) return res.status(400).json({ status: "error", message: "radiusMeters >= 0 olmalıdır." });
+      update.radiusMeters = r;
+    }
+
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ status: "error", message: "Güncellenecek alan belirtilmedi." });
+    }
+
+    const settings = await Settings.findOneAndUpdate({}, { $set: update }, { new: true, upsert: true });
+    res.json({ status: "success", data: settings });
+  } catch (error) {
+    console.error("Admin settings update hatası:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+});
+
+// ═══════════════════════════════════════════════════
+//  SESSIONS (yoklama oturumları)
+// ═══════════════════════════════════════════════════
+
+// POST /api/admin/sessions — yeni oturum başlat
+router.post("/sessions", requireAdminAuth, async (req, res) => {
+  try {
+    const { title, policy, ttlMinutes, requireLocation } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ status: "error", message: "Oturum başlığı (title) zorunludur." });
+    }
+
+    let ttl = parseInt(ttlMinutes, 10) || 15;
+    if (ttl < 1) ttl = 1;
+    if (ttl > 1440) ttl = 1440;
+
+    const validPolicies = ["whitelist", "open"];
+    const sessionPolicy = validPolicies.includes(policy) ? policy : "whitelist";
+
+    const sess = await Session.create({
+      title: title.trim(),
+      policy: sessionPolicy,
+      requireLocation: requireLocation !== undefined ? Boolean(requireLocation) : true,
+      expiresAt: new Date(Date.now() + ttl * 60 * 1000),
+    });
+
+    res.status(201).json({ status: "success", data: sess });
+  } catch (error) {
+    console.error("Admin session create hatası:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+});
+
+// GET /api/admin/sessions/active — aktif oturum
+router.get("/sessions/active", requireAdminAuth, async (_req, res) => {
+  try {
+    const sess = await Session.findActive();
+    res.json({ status: "success", data: sess || null });
+  } catch (error) {
+    console.error("Admin session active hatası:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+});
+
+// POST /api/admin/sessions/:id/close — oturumu kapat
+router.post("/sessions/:id/close", requireAdminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ status: "error", message: "Geçersiz oturum ID." });
+    }
+
+    const sess = await Session.findByIdAndUpdate(id, { $set: { endAt: new Date() } }, { new: true });
+    if (!sess) {
+      return res.status(404).json({ status: "error", message: "Oturum bulunamadı." });
+    }
+
+    res.json({ status: "success", data: sess, message: "Oturum kapatıldı." });
+  } catch (error) {
+    console.error("Admin session close hatası:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
 });
 
 // ═══════════════════════════════════════════════════
@@ -463,13 +583,27 @@ router.get("/attendance", requireAdminAuth, async (req, res) => {
 // POST /api/admin/attendance/manual
 router.post("/attendance/manual", requireAdminAuth, async (req, res) => {
   try {
-    const { universityRollNo, date, time, status = "present", note } = req.body;
+    const { universityRollNo, date, time, status = "present", note, sessionId } = req.body;
 
     // Validasyonlar
     if (!universityRollNo || !date) {
       return res.status(400).json({
         status: "error",
         message: "Eksik alanlar: universityRollNo ve date zorunludur.",
+      });
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Oturum ID (sessionId) zorunludur. Önce bir oturum başlatın.",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Geçersiz oturum ID.",
       });
     }
 
@@ -487,6 +621,15 @@ router.post("/attendance/manual", requireAdminAuth, async (req, res) => {
       });
     }
 
+    // Session var mı?
+    const sess = await Session.findById(sessionId);
+    if (!sess) {
+      return res.status(400).json({
+        status: "error",
+        message: "Oturum bulunamadı. Geçerli bir oturum ID gönderin.",
+      });
+    }
+
     // Öğrenci DB'de olmalı
     const student = await User.findOne({ universityRollNo });
     if (!student) {
@@ -496,16 +639,17 @@ router.post("/attendance/manual", requireAdminAuth, async (req, res) => {
       });
     }
 
-    // Aynı öğrenci + aynı gün kontrolü
-    const dup = await Attendance.findOne({ universityRollNo, date });
+    // Aynı session + aynı öğrenci kontrolü
+    const dup = await Attendance.findOne({ sessionId, universityRollNo });
     if (dup) {
       return res.status(409).json({
         status: "error",
-        message: "Bu tarihte bu öğrenci için yoklama zaten mevcut.",
+        message: "Bu oturumda bu öğrenci için yoklama zaten mevcut.",
       });
     }
 
     const record = await Attendance.create({
+      sessionId,
       name: student.name,
       universityRollNo: student.universityRollNo,
       section: student.section,
@@ -523,14 +667,14 @@ router.post("/attendance/manual", requireAdminAuth, async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({
         status: "error",
-        message: "Bu tarihte bu öğrenci için yoklama zaten mevcut.",
+        message: "Bu oturumda bu öğrenci için yoklama zaten mevcut.",
       });
     }
     if (error.name === "ValidationError") {
       const msgs = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({
         status: "error",
-        message: "Doğrulama hatası: " + msgs.join(", "),
+        message: "Manuel kayıt için zorunlu alan hatası: " + msgs.join(", "),
       });
     }
     console.error("Admin manual attendance hatası:", error);

@@ -47,8 +47,8 @@
       <div class="flex items-center gap-3">
         <img src="logo2.png" alt="Logo" class="h-12" />
         <div>
-          <h1 class="text-lg font-bold text-gray-800 leading-tight">Suluova MYO</h1>
-          <p class="text-xs text-gray-500">Yapay Zeka Okuryazarlığı — Yönetici Paneli</p>
+          <h1 id="headerOrg" class="text-lg font-bold text-gray-800 leading-tight">Suluova MYO</h1>
+          <p id="headerCourse" class="text-xs text-gray-500">Yapay Zeka Okuryazarlığı — Yönetici Paneli</p>
         </div>
       </div>
       <div class="flex gap-2">
@@ -181,6 +181,109 @@
             </thead>
             <tbody id="percentageResultsTable" class="bg-white"></tbody>
           </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  3B) ⚙️ AYARLAR (Settings)                    -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <section id="settingsSection" class="bg-white rounded-lg shadow-md">
+      <button id="toggleSettingsPanel" type="button"
+              class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors rounded-lg">
+        <h2 class="text-lg font-semibold text-gray-800">⚙️ Ayarlar</h2>
+        <span id="settingsPanelArrow" class="text-gray-400 text-xl transition-transform">▼</span>
+      </button>
+      <div id="settingsPanel" class="hidden px-6 pb-6 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Kurum Başlığı</label>
+            <input type="text" id="setOrgTitle"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Ders Başlığı</label>
+            <input type="text" id="setCourseTitle"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Sınıf Enlem (Lat)</label>
+            <input type="number" step="any" id="setClassLat"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Sınıf Boylam (Lng)</label>
+            <input type="number" step="any" id="setClassLng"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Kabul Yarıçapı (metre)</label>
+            <input type="number" min="0" id="setRadius"
+                   class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div class="flex items-center gap-2 pt-5">
+            <input type="checkbox" id="setRequireLocation" class="h-4 w-4 text-primary-600 rounded" />
+            <label for="setRequireLocation" class="text-sm text-gray-700">Konum doğrulama zorunlu</label>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button id="settingsSaveBtn"
+                  class="bg-primary-600 text-white px-5 py-2 rounded-lg hover:bg-primary-700 text-sm font-medium">Kaydet</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  3C) 🕒 OTURUM (Session) YÖNETİMİ             -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <section id="sessionSection" class="bg-white rounded-lg shadow-md">
+      <button id="toggleSessionPanel" type="button"
+              class="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition-colors rounded-lg">
+        <h2 class="text-lg font-semibold text-gray-800">🕒 Oturum (Session) Yönetimi</h2>
+        <span id="sessionPanelArrow" class="text-gray-400 text-xl transition-transform">▼</span>
+      </button>
+      <div id="sessionPanel" class="hidden px-6 pb-6 space-y-4">
+
+        <!-- Aktif oturum bilgisi -->
+        <div id="activeSessionCard" class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+          <p class="text-sm font-medium text-gray-700 mb-2">Aktif Oturum</p>
+          <div id="activeSessionInfo" class="text-sm text-gray-500">Yükleniyor…</div>
+          <button id="closeSessionBtn" class="hidden mt-2 bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 text-xs font-medium">
+            Oturumu Kapat
+          </button>
+        </div>
+
+        <!-- Yeni oturum formu -->
+        <div class="border border-gray-200 rounded-lg p-4 bg-white space-y-3">
+          <p class="text-sm font-medium text-gray-700">Yeni Oturum Başlat</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Başlık</label>
+              <input type="text" id="sessTitle" placeholder="Ders adı / konu"
+                     class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Süre (dakika)</label>
+              <input type="number" id="sessTTL" value="15" min="1" max="1440"
+                     class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Kayıt Politikası</label>
+              <select id="sessPolicy"
+                      class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 bg-white">
+                <option value="whitelist">Whitelist (sadece kayıtlı)</option>
+                <option value="open">Open (herkes katılabilir)</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2 pt-5">
+              <input type="checkbox" id="sessRequireLoc" checked class="h-4 w-4 text-primary-600 rounded" />
+              <label for="sessRequireLoc" class="text-sm text-gray-700">Konum zorunlu</label>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button id="sessCreateBtn"
+                    class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium">Oturum Başlat</button>
+          </div>
         </div>
       </div>
     </section>
@@ -565,6 +668,165 @@
 
       // ===== Çıkış =====
       document.getElementById("logoutBtn").addEventListener("click", doLogout);
+
+      // ═══════════════════════════════════════════
+      //  SETTINGS — Başlıkları yükle ve ayarlar paneli
+      // ═══════════════════════════════════════════
+      let currentSettings = null;
+
+      async function loadSettings() {
+        try {
+          const res = await adminFetch(`${API}/api/admin/settings`);
+          const json = await res.json();
+          if (!res.ok) return;
+          currentSettings = json.data;
+          // Header güncellemeleri
+          document.getElementById("headerOrg").textContent = currentSettings.orgTitle || "Suluova MYO";
+          document.getElementById("headerCourse").textContent =
+            (currentSettings.courseTitle || "Yapay Zeka Okuryazarlığı") + " — Yönetici Paneli";
+          // Form doldur
+          document.getElementById("setOrgTitle").value = currentSettings.orgTitle || "";
+          document.getElementById("setCourseTitle").value = currentSettings.courseTitle || "";
+          document.getElementById("setClassLat").value = currentSettings.classLat ?? "";
+          document.getElementById("setClassLng").value = currentSettings.classLng ?? "";
+          document.getElementById("setRadius").value = currentSettings.radiusMeters ?? "";
+          document.getElementById("setRequireLocation").checked = !!currentSettings.requireLocation;
+        } catch (_) { /* sessizce */ }
+      }
+
+      // Sayfa açılınca ayarları yükle
+      loadSettings();
+
+      // Settings accordion
+      const settingsPanel = document.getElementById("settingsPanel");
+      const settingsArrow = document.getElementById("settingsPanelArrow");
+      document.getElementById("toggleSettingsPanel").addEventListener("click", () => {
+        const open = settingsPanel.classList.toggle("hidden");
+        settingsArrow.style.transform = open ? "" : "rotate(180deg)";
+      });
+
+      // Settings kaydet
+      document.getElementById("settingsSaveBtn").addEventListener("click", async () => {
+        const btn = document.getElementById("settingsSaveBtn");
+        setLoading(btn, true, "Kaydet");
+        try {
+          const body = {
+            orgTitle: document.getElementById("setOrgTitle").value.trim(),
+            courseTitle: document.getElementById("setCourseTitle").value.trim(),
+            classLat: parseFloat(document.getElementById("setClassLat").value),
+            classLng: parseFloat(document.getElementById("setClassLng").value),
+            radiusMeters: parseFloat(document.getElementById("setRadius").value),
+            requireLocation: document.getElementById("setRequireLocation").checked,
+          };
+          const res = await adminFetch(`${API}/api/admin/settings`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "Kaydedilemedi");
+          toast("Ayarlar kaydedildi.", true);
+          loadSettings();
+        } catch (err) {
+          toast("Ayar hatası: " + err.message, false);
+        } finally {
+          setLoading(btn, false, "Kaydet");
+        }
+      });
+
+      // JWT-only bölümleri gizle
+      if (authMode !== "jwt") {
+        const hide = document.getElementById("settingsSection");
+        if (hide) hide.style.display = "none";
+        const hide2 = document.getElementById("sessionSection");
+        if (hide2) hide2.style.display = "none";
+      }
+
+      // ═══════════════════════════════════════════
+      //  SESSION — Oturum yönetimi
+      // ═══════════════════════════════════════════
+      let activeSession = null;
+
+      const sessionPanel = document.getElementById("sessionPanel");
+      const sessionArrow = document.getElementById("sessionPanelArrow");
+      document.getElementById("toggleSessionPanel").addEventListener("click", () => {
+        const open = sessionPanel.classList.toggle("hidden");
+        sessionArrow.style.transform = open ? "" : "rotate(180deg)";
+        if (!open) loadActiveSession();
+      });
+
+      async function loadActiveSession() {
+        const infoEl = document.getElementById("activeSessionInfo");
+        const closeBtn = document.getElementById("closeSessionBtn");
+        try {
+          const res = await adminFetch(`${API}/api/admin/sessions/active`);
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message);
+
+          if (json.data) {
+            activeSession = json.data;
+            const exp = new Date(activeSession.expiresAt).toLocaleString("tr-TR");
+            const policyTR = activeSession.policy === "open" ? "Açık" : "Whitelist";
+            const locTR = activeSession.requireLocation ? "Evet" : "Hayır";
+            infoEl.innerHTML =
+              `<span class="font-semibold text-gray-800">${activeSession.title}</span><br/>` +
+              `<span class="text-xs">Politika: <b>${policyTR}</b> | Konum: <b>${locTR}</b> | Bitiş: ${exp}</span><br/>` +
+              `<span class="text-xs font-mono text-gray-400">ID: ${activeSession._id}</span>`;
+            closeBtn.classList.remove("hidden");
+          } else {
+            activeSession = null;
+            infoEl.textContent = "Aktif oturum yok.";
+            closeBtn.classList.add("hidden");
+          }
+        } catch (err) {
+          infoEl.textContent = "Oturum bilgisi alınamadı.";
+          closeBtn.classList.add("hidden");
+        }
+      }
+
+      // Oturum kapat
+      document.getElementById("closeSessionBtn").addEventListener("click", async () => {
+        if (!activeSession) return;
+        if (!confirm("Aktif oturumu kapatmak istediğinize emin misiniz?")) return;
+        try {
+          const res = await adminFetch(`${API}/api/admin/sessions/${activeSession._id}/close`, { method: "POST" });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message);
+          toast("Oturum kapatıldı.", true);
+          loadActiveSession();
+        } catch (err) {
+          toast("Oturum kapatılamadı: " + err.message, false);
+        }
+      });
+
+      // Yeni oturum oluştur
+      document.getElementById("sessCreateBtn").addEventListener("click", async () => {
+        const title = document.getElementById("sessTitle").value.trim();
+        if (!title) { toast("Başlık zorunludur.", false); return; }
+        const btn = document.getElementById("sessCreateBtn");
+        setLoading(btn, true, "Oturum Başlat");
+        try {
+          const body = {
+            title,
+            ttlMinutes: parseInt(document.getElementById("sessTTL").value, 10) || 15,
+            policy: document.getElementById("sessPolicy").value,
+            requireLocation: document.getElementById("sessRequireLoc").checked,
+          };
+          const res = await adminFetch(`${API}/api/admin/sessions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "Oluşturulamadı");
+          toast("Oturum başlatıldı: " + json.data.title, true);
+          loadActiveSession();
+        } catch (err) {
+          toast("Oturum hatası: " + err.message, false);
+        } finally {
+          setLoading(btn, false, "Oturum Başlat");
+        }
+      });
 
       // ═══════════════════════════════════════════
       //  1) TARİHE GÖRE YOKLAMA
@@ -1189,7 +1451,7 @@
               }),
             });
           } else {
-            // POST manual
+            // POST manual — sessionId gerekli
             const roll = attModalRoll.value.trim();
             const date = attModalDate.value;
             if (!roll || !/^\d{9}$/.test(roll)) {
@@ -1202,10 +1464,25 @@
               attModalError.classList.remove("hidden");
               setLoading(attModalSave, false, "Kaydet"); return;
             }
+            // Aktif session al
+            let sessId = activeSession?._id;
+            if (!sessId) {
+              try {
+                const sr = await adminFetch(`${API}/api/admin/sessions/active`);
+                const sj = await sr.json();
+                if (sj.data) sessId = sj.data._id;
+              } catch (_) {}
+            }
+            if (!sessId) {
+              attModalError.textContent = "Aktif oturum yok. Önce bir oturum başlatın.";
+              attModalError.classList.remove("hidden");
+              setLoading(attModalSave, false, "Kaydet"); return;
+            }
             res = await adminFetch(`${API}/api/admin/attendance/manual`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
+                sessionId: sessId,
                 universityRollNo: roll,
                 date,
                 status: attModalStatus.value,

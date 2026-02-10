@@ -11,12 +11,14 @@ const helmet = require("helmet");
 // Import models and routes
 const User = require("./models/User");
 const Attendance = require("./models/Attendance");
+const Session = require("./models/Session");
+const Settings = require("./models/Settings");
 const attendanceRoutes = require("./routes/attendance");
-const { generateQRCode, validateSession } = require("./qr-generator");
+const { generateQRCode, validateSession, getDbSessionId } = require("./qr-generator");
 const adminRoutes = require("./routes/adminRoutes");
 
-// ENV validation
-const requiredEnvVars = ["MONGO_URI", "LATITUDE", "LONGITUDE", "RADIUS", "QR_SECRET_KEY", "ADMIN_USERNAME", "ADMIN_PASSWORD", "JWT_SECRET"];
+// ENV validation (LATITUDE, LONGITUDE, RADIUS artık opsiyonel — Settings DB'den gelir)
+const requiredEnvVars = ["MONGO_URI", "QR_SECRET_KEY", "ADMIN_USERNAME", "ADMIN_PASSWORD", "JWT_SECRET"];
 requiredEnvVars.forEach((envVar) => {
   if (!process.env[envVar]) {
     console.error(`${envVar} environment variable is required`);
@@ -312,14 +314,37 @@ app.get("/api/generate-qr", qrLimiter, async (req, res) => {
     if (ttlMinutes > 60) ttlMinutes = 60;
     const ttlMs = ttlMinutes * 60 * 1000;
 
-    console.log(`Generating QR code for IP: ${req.ip}, TTL: ${ttlMinutes} dk`);
-    const qrData = await generateQRCode(req.ip, ttlMs);
+    // Settings — konum bilgisi için
+    const settings = await Settings.getSettings();
+
+    // Aktif DB session bul veya oluştur
+    let dbSession = await Session.findActive();
+    if (!dbSession) {
+      const today = new Date().toLocaleDateString("tr-TR", { year: "numeric", month: "2-digit", day: "2-digit" });
+      dbSession = await Session.create({
+        title: `${settings.courseTitle} — ${today}`,
+        policy: "whitelist",
+        requireLocation: settings.requireLocation,
+        expiresAt: new Date(Date.now() + ttlMs),
+      });
+    }
+
+    console.log(`Generating QR code for IP: ${req.ip}, TTL: ${ttlMinutes} dk, Session: ${dbSession._id}`);
+    const qrData = await generateQRCode(req.ip, ttlMs, dbSession._id.toString());
     console.log(`Generated QR code at: ${qrData.qrImage}`);
     res.json({
       status: "success",
       qrImage: qrData.qrImage,
-      sessionId: qrData.sessionId,
+      sessionId: dbSession._id,
+      qrToken: qrData.qrToken,
       expiresIn: qrData.expiresIn,
+      session: {
+        _id: dbSession._id,
+        title: dbSession.title,
+        policy: dbSession.policy,
+        requireLocation: dbSession.requireLocation,
+        expiresAt: dbSession.expiresAt,
+      },
     });
   } catch (error) {
     console.error("QR generation error:", error);
@@ -327,18 +352,30 @@ app.get("/api/generate-qr", qrLimiter, async (req, res) => {
   }
 });
 
-// Session validation
-app.post("/api/validate-session", (req, res) => {
+// Session validation (supports qrToken and legacy sessionId)
+app.post("/api/validate-session", async (req, res) => {
   try {
-    const { sessionId } = req.body;
-    if (!sessionId) {
-      return res.status(400).json({ valid: false, message: "Session ID required" });
+    const { sessionId, qrToken } = req.body;
+    const token = qrToken || sessionId;
+    if (!token) {
+      return res.status(400).json({ valid: false, message: "Session ID or QR token required" });
     }
-    const isValid = validateSession(sessionId);
-    res.json({
-      valid: isValid,
-      message: isValid ? "Valid session" : "Invalid or expired session ID",
-    });
+
+    // Try QR token first (memory map)
+    if (validateSession(token)) {
+      const dbSessId = getDbSessionId(token);
+      return res.json({ valid: true, message: "Valid session", dbSessionId: dbSessId });
+    }
+
+    // Fallback: maybe token is a DB session ID — check if active
+    if (mongoose.Types.ObjectId.isValid(token)) {
+      const dbSess = await Session.findOne({ _id: token, endAt: null, expiresAt: { $gt: new Date() } });
+      if (dbSess) {
+        return res.json({ valid: true, message: "Valid session", dbSessionId: dbSess._id });
+      }
+    }
+
+    res.json({ valid: false, message: "Invalid or expired session" });
   } catch (error) {
     console.error("Session validation error:", error);
     res.status(500).json({ valid: false, message: "Validation error" });
@@ -351,26 +388,30 @@ app.get("/verify-attendance", (req, res) => {
     const dataStr = decodeURIComponent(req.query.data);
     const data = JSON.parse(dataStr);
 
-    if (!data?.sessionId || !data?.timestamp || !data?.hash) {
+    // Support both new (qrToken) and legacy (sessionId-only) payloads
+    const qrToken = data.qrToken || data.sessionId;
+    if (!qrToken || !data.timestamp || !data.hash) {
       return res.status(400).send("Invalid QR code data: Missing fields");
     }
 
     const secretKey = process.env.QR_SECRET_KEY;
     const expectedHash = crypto
       .createHash("sha256")
-      .update(data.sessionId + data.timestamp + secretKey)
+      .update(qrToken + data.timestamp + secretKey)
       .digest("hex");
 
     if (data.hash !== expectedHash) {
       return res.status(400).send("Geçersiz QR kodu: Hash uyuşmuyor");
     }
 
-    // Session bazlı süre kontrolü (TTL değişken olduğu için sabit süre yok)
-    if (!validateSession(data.sessionId)) {
+    // QR token TTL kontrolü
+    if (!validateSession(qrToken)) {
       return res.status(400).send("QR kodunun süresi dolmuş. Lütfen yeni bir QR kodu okutun.");
     }
 
-    res.redirect(`/index.html?sessionId=${data.sessionId}`);
+    // Redirect — DB sessionId ve qrToken ikisini de yolla
+    const dbSessionId = data.sessionId || getDbSessionId(qrToken) || qrToken;
+    res.redirect(`/index.html?sessionId=${dbSessionId}&qrToken=${qrToken}`);
   } catch (error) {
     console.error("QR validation error:", error);
     res.status(400).send("Invalid QR code data");
@@ -390,9 +431,9 @@ function getDistanceFromLatLngInMeters(lat1, lng1, lat2, lng2) {
   return R * c;
 }
 
-// Attendance validation middleware
+// Attendance validation middleware — location artık opsiyonel
 function validateAttendance(req, res, next) {
-  const required = ["universityRollNo", "deviceFingerprint", "sessionId"];
+  const required = ["universityRollNo", "sessionId"];
   const missing = required.filter((field) => !req.body[field]);
 
   if (missing.length) {
@@ -411,109 +452,212 @@ function validateAttendance(req, res, next) {
     });
   }
 
-  if (
-    !req.body.location ||
-    typeof req.body.location.lat !== "number" ||
-    typeof req.body.location.lng !== "number"
-  ) {
-    return res.status(400).json({
-      status: "error",
-      message: "Konum bilgisi (lat, lng) gereklidir.",
-    });
-  }
+  // deviceFingerprint opsiyonel ama önerilir
   next();
 }
 
-// Mark attendance
+// Mark attendance (session-based)
 app.post("/mark-attendance", validateAttendance, async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const txn = await mongoose.startSession();
+  txn.startTransaction();
   try {
-    const { universityRollNo, deviceFingerprint, location, sessionId: qrSessionId } = req.body;
+    const {
+      universityRollNo,
+      deviceFingerprint,
+      location,
+      sessionId: sentSessionId,
+      qrToken,
+      name: sentName,
+    } = req.body;
     const today = new Date().toISOString().split("T")[0];
 
-    // QR Session doğrulama (server-side)
-    if (!validateSession(qrSessionId)) {
-      await session.abortTransaction();
-      session.endSession();
+    // --- QR token doğrulama (varsa) ---
+    if (qrToken) {
+      // qrToken açıkça gönderilmişse doğrulama zorunlu
+      if (!validateSession(qrToken)) {
+        await txn.abortTransaction();
+        txn.endSession();
+        return res.status(401).json({
+          status: "error",
+          message: "QR kodunun süresi dolmuş veya geçersiz. Lütfen yeni bir QR kodu okutun.",
+        });
+      }
+    }
+    // qrToken yoksa sadece DB session kontrolü yapılacak (backward compat)
+
+    // --- DB Session doğrulama ---
+    let dbSessionId = sentSessionId;
+    // Eğer gelen sessionId bir QR token ise, DB session'ı ondan al
+    if (!mongoose.Types.ObjectId.isValid(dbSessionId)) {
+      const mappedId = getDbSessionId(dbSessionId);
+      if (mappedId) dbSessionId = mappedId;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(dbSessionId)) {
+      await txn.abortTransaction();
+      txn.endSession();
       return res.status(400).json({
         status: "error",
-        message: "QR oturumu geçersiz veya süresi dolmuş. Lütfen QR kodu tekrar okutun.",
+        message: "Geçersiz oturum. Lütfen QR kodu tekrar okutun.",
       });
     }
 
+    const dbSession = await Session.findOne({
+      _id: dbSessionId,
+      endAt: null,
+      expiresAt: { $gt: new Date() },
+    }).session(txn);
+
+    if (!dbSession) {
+      await txn.abortTransaction();
+      txn.endSession();
+      return res.status(400).json({
+        status: "error",
+        message: "Yoklama oturumu bulunamadı veya süresi dolmuş.",
+      });
+    }
+
+    // --- Duplicate kontrol (session bazlı) ---
     const [existing, existingDevice] = await Promise.all([
-      Attendance.findOne({ universityRollNo, date: today }).session(session),
-      Attendance.findOne({ deviceFingerprint, date: today }).session(session),
+      Attendance.findOne({ sessionId: dbSession._id, universityRollNo }).session(txn),
+      deviceFingerprint
+        ? Attendance.findOne({ sessionId: dbSession._id, deviceFingerprint }).session(txn)
+        : null,
     ]);
 
     if (existing) {
-      await session.abortTransaction();
-      session.endSession();
+      await txn.abortTransaction();
+      txn.endSession();
       return res.status(400).json({
         status: "error",
-        message: "Bugün yoklama zaten alınmış.",
+        message: "Bu oturumda yoklama zaten alınmış.",
       });
     }
 
     if (existingDevice) {
-      await session.abortTransaction();
-      session.endSession();
+      await txn.abortTransaction();
+      txn.endSession();
       return res.status(400).json({
         status: "error",
-        message: "Bu cihazla bugün zaten yoklama girilmiş.",
+        message: "Bu cihazla bu oturumda zaten yoklama girilmiş.",
       });
     }
 
-    const distance = getDistanceFromLatLngInMeters(location.lat, location.lng, CLASS_LAT, CLASS_LNG);
+    // --- Settings (konum bilgisi için) ---
+    const settings = await Settings.getSettings();
+    const needLocation = dbSession.requireLocation || settings.requireLocation;
 
-    if (distance > MAX_DISTANCE_METERS) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
-        status: "error",
-        message: `Derse ait konumun ${MAX_DISTANCE_METERS}m içinde olmalısınız. Mevcut uzaklık: ${distance.toFixed(0)}m`,
-      });
+    let distance = null;
+    if (needLocation) {
+      if (
+        !location ||
+        typeof location.lat !== "number" ||
+        typeof location.lng !== "number"
+      ) {
+        await txn.abortTransaction();
+        txn.endSession();
+        return res.status(400).json({
+          status: "error",
+          message: "Konum bilgisi (lat, lng) gereklidir.",
+        });
+      }
+
+      distance = getDistanceFromLatLngInMeters(
+        location.lat,
+        location.lng,
+        settings.classLat,
+        settings.classLng
+      );
+
+      if (distance > settings.radiusMeters) {
+        await txn.abortTransaction();
+        txn.endSession();
+        return res.status(400).json({
+          status: "error",
+          message: `Derse ait konumun ${settings.radiusMeters}m içinde olmalısınız. Mevcut uzaklık: ${distance.toFixed(0)}m`,
+        });
+      }
+    } else if (location && typeof location.lat === "number" && typeof location.lng === "number") {
+      // Konum zorunlu değil ama gönderilmişse mesafe hesapla
+      distance = getDistanceFromLatLngInMeters(location.lat, location.lng, settings.classLat, settings.classLng);
     }
 
-    // Öğrenciyi DB'den bul (upsert YOK — kayıtlı olmalı)
-    const student = await User.findOne({ universityRollNo }).session(session);
-    if (!student) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
-        status: "error",
-        message: "Öğrenci sistemde kayıtlı değil. Lütfen öğretim elemanına/ders sorumlusuna bildiriniz.",
-      });
+    // --- Policy: whitelist vs open ---
+    let studentName = "";
+    let studentSection = "";
+    let studentClassRoll = "";
+    let studentId = null;
+
+    const student = await User.findOne({ universityRollNo }).session(txn);
+
+    if (dbSession.policy === "whitelist") {
+      if (!student) {
+        await txn.abortTransaction();
+        txn.endSession();
+        return res.status(400).json({
+          status: "error",
+          message: "Öğrenci sistemde kayıtlı değil. Lütfen öğretim elemanına/ders sorumlusuna bildiriniz.",
+        });
+      }
+      studentName = student.name;
+      studentSection = student.section;
+      studentClassRoll = student.classRollNo;
+      studentId = student._id;
+    } else {
+      // open policy
+      if (student) {
+        studentName = student.name;
+        studentSection = student.section;
+        studentClassRoll = student.classRollNo;
+        studentId = student._id;
+      } else {
+        // open modda name zorunlu
+        if (!sentName || !sentName.trim()) {
+          await txn.abortTransaction();
+          txn.endSession();
+          return res.status(400).json({
+            status: "error",
+            message: "Ad soyad bilgisi gereklidir (açık kayıt modunda).",
+          });
+        }
+        studentName = sentName.trim();
+      }
     }
 
     const attendance = await Attendance.create(
       [{
-        name: student.name,
-        universityRollNo: student.universityRollNo,
-        section: student.section,
-        classRollNo: student.classRollNo,
-        location: req.body.location,
-        deviceFingerprint: req.body.deviceFingerprint,
+        sessionId: dbSession._id,
+        name: studentName,
+        universityRollNo,
+        section: studentSection,
+        classRollNo: studentClassRoll,
+        location: location || undefined,
+        deviceFingerprint: deviceFingerprint || undefined,
         date: today,
         time: new Date().toLocaleTimeString("tr-TR", { hour12: false }),
         status: "present",
-        studentId: student._id,
+        studentId,
         distanceFromClass: distance,
       }],
-      { session }
+      { session: txn }
     );
 
-    await session.commitTransaction();
-    session.endSession();
+    await txn.commitTransaction();
+    txn.endSession();
     res.json({
       status: "success",
       message: "Yoklama başarıyla kaydedildi.",
       data: attendance[0],
     });
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+    await txn.abortTransaction();
+    txn.endSession();
+    if (error.code === 11000) {
+      return res.status(400).json({
+        status: "error",
+        message: "Bu oturumda yoklama zaten alınmış.",
+      });
+    }
     console.error("Yoklama hatası:", error);
     res.status(500).json({ status: "error", message: "Sunucu hatası. Lütfen tekrar deneyiniz." });
   }
@@ -545,21 +689,30 @@ mongoose
   .then(async () => {
     console.log("Connected to MongoDB");
     try {
-      // Eski non-unique index'leri temizle, schema'daki unique index'ler otomatik oluşur
+      // Eski date-based index'leri temizle, session-based index'ler otomatik oluşur
       const collection = mongoose.connection.collection("attendances");
       const existingIndexes = await collection.indexes();
+      const dropNames = [
+        "student_date_attendance_idx",
+        "device_date_attendance_idx",
+        "universityRollNo_1_date_1",
+        "deviceFingerprint_1_date_1",
+      ];
       for (const idx of existingIndexes) {
-        if (
-          (idx.name === "student_date_attendance_idx" ||
-           idx.name === "device_date_attendance_idx") &&
-          !idx.unique
-        ) {
-          await collection.dropIndex(idx.name).catch(() => {});
-          console.log(`Dropped old non-unique index: ${idx.name}`);
+        if (dropNames.includes(idx.name) || (idx.name !== "_id_" && !idx.name.startsWith("sessionId"))) {
+          try {
+            await collection.dropIndex(idx.name);
+            console.log(`Dropped old index: ${idx.name}`);
+          } catch (_) { /* zaten yok */ }
         }
       }
       await Attendance.syncIndexes();
       console.log("Indexes synced for Attendance.");
+      await Session.syncIndexes();
+      console.log("Indexes synced for Session.");
+      // Settings singleton oluştur
+      await Settings.getSettings();
+      console.log("Settings singleton initialized.");
     } catch (err) {
       console.error("Index sync error:", err);
     }

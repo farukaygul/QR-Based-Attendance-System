@@ -8,7 +8,7 @@ const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 dakika varsayılan
 const QR_CODE_DIR =
   process.env.QR_CODE_DIR || path.join(__dirname, "public", "qrcodes");
 
-// Track active sessions and IP cache
+// Track active QR tokens (short-lived scan tokens) and IP cache
 const activeSessions = new Map();
 const ipCache = new Map();
 
@@ -19,37 +19,41 @@ if (!fs.existsSync(QR_CODE_DIR)) {
 
 /**
  * @param {string} ipAddress
- * @param {number} [ttlMs] — session TTL in milliseconds (default 5 min)
+ * @param {number} [ttlMs] — QR token TTL in milliseconds (default 5 min)
+ * @param {string} [dbSessionId] — DB Session._id (yoksa eski davranış)
  */
-async function generateQRCode(ipAddress, ttlMs) {
+async function generateQRCode(ipAddress, ttlMs, dbSessionId) {
   const ttl = typeof ttlMs === "number" && ttlMs > 0 ? ttlMs : DEFAULT_TTL_MS;
 
-  // Check cache — bypass if TTL changed
+  // Check cache — bypass if TTL changed or dbSessionId changed
   if (ipCache.has(ipAddress)) {
     const cached = ipCache.get(ipAddress);
     const remaining = cached.expiresAt - Date.now();
-    if (remaining > 0 && cached.ttlMs === ttl) {
-      // Return cached result with updated remaining time
+    if (remaining > 0 && cached.ttlMs === ttl && cached.dbSessionId === (dbSessionId || null)) {
       return { ...cached.data, expiresIn: remaining };
     }
   }
 
   try {
-    const sessionId = crypto.randomBytes(16).toString("hex");
+    const qrToken = crypto.randomBytes(16).toString("hex");
     const timestamp = Date.now();
 
     const secretKey = process.env.QR_SECRET_KEY || "default-secret-key";
     const hash = crypto
       .createHash("sha256")
-      .update(sessionId + timestamp + secretKey)
+      .update(qrToken + timestamp + secretKey)
       .digest("hex");
 
     const baseUrl =
       process.env.BASE_URL ||
       `http://localhost:${process.env.PORT || 5050}`;
 
+    // QR data: sessionId = DB session, qrToken = short-lived scan token
+    const qrPayload = { qrToken, timestamp, hash };
+    if (dbSessionId) qrPayload.sessionId = dbSessionId;
+
     const qrData = `${baseUrl}/verify-attendance?data=${encodeURIComponent(
-      JSON.stringify({ sessionId, timestamp, hash })
+      JSON.stringify(qrPayload)
     )}`;
 
     const fileName = `qr_${timestamp}.png`;
@@ -61,19 +65,21 @@ async function generateQRCode(ipAddress, ttlMs) {
       margin: 2,
     });
 
-    // Register session with given TTL
-    activeSessions.set(sessionId, {
+    // Register QR token with given TTL
+    activeSessions.set(qrToken, {
       ip: ipAddress,
       expiresAt: timestamp + ttl,
+      dbSessionId: dbSessionId || null,
     });
 
     setTimeout(() => {
-      activeSessions.delete(sessionId);
+      activeSessions.delete(qrToken);
     }, ttl);
 
     const result = {
       qrImage: `/qrcodes/${fileName}`,
-      sessionId,
+      qrToken,
+      sessionId: dbSessionId || qrToken, // backward compat: sessionId alanı
       expiresIn: ttl,
     };
 
@@ -81,6 +87,7 @@ async function generateQRCode(ipAddress, ttlMs) {
     ipCache.set(ipAddress, {
       data: result,
       ttlMs: ttl,
+      dbSessionId: dbSessionId || null,
       expiresAt: timestamp + ttl,
     });
 
@@ -91,16 +98,28 @@ async function generateQRCode(ipAddress, ttlMs) {
   }
 }
 
-function validateSession(sessionId) {
-  const session = activeSessions.get(sessionId);
+/**
+ * Validate a short-lived QR scan token.
+ * Accepts either the new qrToken or legacy sessionId (backward compat).
+ */
+function validateSession(token) {
+  const session = activeSessions.get(token);
   if (!session) return false;
 
   if (Date.now() > session.expiresAt) {
-    activeSessions.delete(sessionId);
+    activeSessions.delete(token);
     return false;
   }
 
   return true;
+}
+
+/**
+ * Get the DB session ID associated with a QR token (if any).
+ */
+function getDbSessionId(qrToken) {
+  const entry = activeSessions.get(qrToken);
+  return entry ? entry.dbSessionId : null;
 }
 
 // Cleanup: 60 dakikadan eski qr_*.png dosyalarını sil
@@ -135,4 +154,5 @@ cleanupOldQRCodes();
 module.exports = {
   generateQRCode,
   validateSession,
+  getDbSessionId,
 };

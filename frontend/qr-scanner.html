@@ -38,8 +38,8 @@
       <div class="flex items-center gap-3">
         <img src="/logo2.png" alt="Logo" class="h-12" />
         <div>
-          <h1 class="text-lg font-bold text-gray-800 leading-tight">Suluova MYO</h1>
-          <p class="text-xs text-gray-500">Yapay Zeka Okuryazarlığı — QR ile Yoklama</p>
+          <h1 id="qrHeaderOrg" class="text-lg font-bold text-gray-800 leading-tight">Suluova MYO</h1>
+          <p id="qrHeaderCourse" class="text-xs text-gray-500">Yapay Zeka Okuryazarlığı — QR ile Yoklama</p>
         </div>
       </div>
       <a href="admin-dashboard.html"
@@ -81,6 +81,12 @@
         <div class="hidden print:block mb-4">
           <img src="/logo2.png" alt="Logo" class="h-14 mx-auto mb-2" />
           <p class="text-lg font-bold">Suluova MYO — Yoklama QR</p>
+        </div>
+
+        <!-- Aktif session banner -->
+        <div id="qrSessionBanner" class="hidden mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-left text-sm">
+          <p class="font-semibold text-blue-800" id="qrSessionTitle"></p>
+          <p class="text-xs text-blue-600" id="qrSessionMeta"></p>
         </div>
 
         <!-- Loading -->
@@ -171,6 +177,29 @@
 
     function initQRPage() {
 
+    // ===== JWT helper =====
+    async function adminFetch(url, options = {}) {
+      const jwt = localStorage.getItem("adminJwt");
+      if (jwt) {
+        options.headers = options.headers || {};
+        options.headers["Authorization"] = `Bearer ${jwt}`;
+      }
+      return fetch(url, options);
+    }
+
+    // ===== Settings — başlıkları yükle =====
+    (async () => {
+      try {
+        const res = await adminFetch(`${API_BASE}/api/admin/settings`);
+        const json = await res.json();
+        if (res.ok && json.data) {
+          document.getElementById("qrHeaderOrg").textContent = json.data.orgTitle || "Suluova MYO";
+          document.getElementById("qrHeaderCourse").textContent =
+            (json.data.courseTitle || "Yapay Zeka Okuryazarlığı") + " — QR ile Yoklama";
+        }
+      } catch (_) {}
+    })();
+
     // ===== State =====
     let currentSessionId = null;
     let expiryInterval = null;
@@ -255,6 +284,18 @@
         }
 
         currentSessionId = data.sessionId;
+
+        // Session banner göster
+        const banner = document.getElementById("qrSessionBanner");
+        if (data.session) {
+          document.getElementById("qrSessionTitle").textContent = data.session.title || "";
+          const policyTR = data.session.policy === "open" ? "Açık" : "Whitelist";
+          const locTR = data.session.requireLocation ? "Konum: Evet" : "Konum: Hayır";
+          document.getElementById("qrSessionMeta").textContent = `${policyTR} | ${locTR}`;
+          banner.classList.remove("hidden");
+        } else {
+          banner.classList.add("hidden");
+        }
 
         qrImage.onload = () => {
           qrLoading.classList.add("hidden");

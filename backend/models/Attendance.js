@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const attendancesSchema = new mongoose.Schema({
+  sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session', required: true },
   name: { type: String, required: true },
   universityRollNo: { type: String, required: true },
   section: { type: String, default: "" },
@@ -17,16 +18,18 @@ const attendancesSchema = new mongoose.Schema({
   deviceFingerprint: { type: String },
   status: { type: String, default: "present" },
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  distanceFromClass: { type: Number },
+  distanceFromClass: { type: Number, default: null },
   manual: { type: Boolean, default: false },
   note: { type: String }
 }, {
   timestamps: true
 });
 
-// universityRollNo + date benzersiz (aynı öğrenci aynı gün 2 kez yoklama alamaz)
-attendancesSchema.index({ universityRollNo: 1, date: 1 }, { unique: true });
-// deviceFingerprint + date — sparse (manuel kayıtlarda fingerprint olmayabilir)
-attendancesSchema.index({ deviceFingerprint: 1, date: 1 }, { sparse: true });
+// Session bazlı: aynı session'da aynı öğrenci 1 kez
+attendancesSchema.index({ sessionId: 1, universityRollNo: 1 }, { unique: true });
+// Session bazlı: aynı session'da aynı cihaz 1 kez (fingerprint varsa)
+attendancesSchema.index({ sessionId: 1, deviceFingerprint: 1 }, { unique: true, sparse: true });
+// Raporlama için date index (backward compat)
+attendancesSchema.index({ date: 1 });
 
 module.exports = mongoose.model('Attendance', attendancesSchema);
