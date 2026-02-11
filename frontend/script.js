@@ -91,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let isSubmitting = false;
   let sessionPolicy = "whitelist"; // varsayılan
+  let sessionOpenRole = "student";  // admin seçimi (sprint-3)
 
   // --- Public settings — başlıkları yükle ---
   fetch(`${API}/api/public/settings`)
@@ -112,6 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .then((json) => {
         if (json.status === "success" && json.data) {
           sessionPolicy = json.data.policy || "whitelist";
+          sessionOpenRole = json.data.openRole || "student";  // admin seçimi
 
           // Oturum başlığını göster
           const sessTitleEl = document.getElementById("indexSessionTitle");
@@ -122,16 +124,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
           if (sessionPolicy === "open") {
             // Whitelist formunu gizle, open formu göster
-            step1.classList.add("hidden");
+            document.getElementById("step1").classList.add("hidden");
             if (step1Open) {
               step1Open.classList.remove("hidden");
               const titleEl = document.getElementById("openSessionTitle");
               if (titleEl) titleEl.textContent = json.data.title || "Açık Oturum";
             }
+
+            // OpenRole'a göre form göster
+            showFormFieldsByRole(sessionOpenRole);
           }
         }
       })
       .catch(() => { /* sessizce whitelist'te kal */ });
+  }
+
+  // --- Helper: openRole'a göre form alanlarını göster ---
+  function showFormFieldsByRole(role) {
+    const studentFields = document.getElementById("studentFields");
+    const academicFields = document.getElementById("academicFields");
+    const guestFields = document.getElementById("guestFields");
+    
+    if (studentFields) studentFields.classList.toggle("hidden", role !== "student");
+    if (academicFields) academicFields.classList.toggle("hidden", role !== "academic");
+    if (guestFields) guestFields.classList.toggle("hidden", role !== "guest");
   }
 
   // --- OPEN MOD: Yoklama gönder ---
@@ -142,20 +158,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const openError = document.getElementById("openError");
       openError.classList.add("hidden");
 
+      const role = sessionOpenRole;  // admin seçimi, katılımcı değil
       const nameVal = document.getElementById("openName").value.trim();
       const rollVal = document.getElementById("openRollNo").value.trim();
+      const unitVal = document.getElementById("openUnit").value.trim();
+      const emailVal = document.getElementById("openEmail").value.trim();
 
+      // Ad soyad her zaman zorunlu
       if (!nameVal) {
         openError.textContent = "Ad soyad zorunludur.";
         openError.classList.remove("hidden");
         return;
       }
 
-      // Öğrenci no girilmişse 9 hane mi kontrol et
-      if (rollVal && !/^\d{9}$/.test(rollVal)) {
-        openError.textContent = "Öğrenci numarası girilecekse 9 haneli bir sayı olmalıdır.";
-        openError.classList.remove("hidden");
-        return;
+      // Role-based validation
+      if (role === "student") {
+        if (!rollVal) {
+          openError.textContent = "Öğrenci için öğrenci numarası zorunludur.";
+          openError.classList.remove("hidden");
+          return;
+        }
+        if (!/^\d{9}$/.test(rollVal)) {
+          openError.textContent = "Öğrenci numarası 9 haneli bir sayı olmalıdır.";
+          openError.classList.remove("hidden");
+          return;
+        }
       }
 
       if (!sessionId) {
@@ -187,6 +214,8 @@ document.addEventListener("DOMContentLoaded", () => {
           sessionId,
           deviceFingerprint: fingerprint,
         };
+        if (role === "academic" && unitVal) payload.unit = unitVal;
+        if (role === "guest" && emailVal) payload.email = emailVal;
         if (qrToken) payload.qrToken = qrToken;
         if (loc) payload.location = loc;
 
@@ -207,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         statusEl.innerText = "Yoklama başarıyla kaydedildi!";
         statusEl.className = "text-center mt-6 text-sm text-green-600";
-        if (rollVal) {
+        if (rollVal && role === "student") {
           setTimeout(() => {
             window.location.href = `/dashboard.html?rollNo=${encodeURIComponent(rollVal)}`;
           }, 1500);

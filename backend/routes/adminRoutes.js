@@ -154,7 +154,7 @@ router.put("/settings", requireAdminAuth, async (req, res) => {
 // POST /api/admin/sessions — yeni oturum başlat
 router.post("/sessions", requireAdminAuth, async (req, res) => {
   try {
-    const { title, policy, ttlMinutes, requireLocation } = req.body;
+    const { title, policy, ttlMinutes, requireLocation, openRole } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ status: "error", message: "Oturum başlığı (title) zorunludur." });
@@ -167,9 +167,13 @@ router.post("/sessions", requireAdminAuth, async (req, res) => {
     const validPolicies = ["whitelist", "open"];
     const sessionPolicy = validPolicies.includes(policy) ? policy : "whitelist";
 
+    const validRoles = ["student", "academic", "guest"];
+    const sessOpenRole = validRoles.includes(openRole) ? openRole : "student";
+
     const sess = await Session.create({
       title: title.trim(),
       policy: sessionPolicy,
+      openRole: sessOpenRole,
       requireLocation: requireLocation !== undefined ? Boolean(requireLocation) : true,
       expiresAt: new Date(Date.now() + ttl * 60 * 1000),
     });

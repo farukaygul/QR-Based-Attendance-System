@@ -163,7 +163,7 @@ app.get("/api/sessions/:id/public", async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ status: "error", message: "Geçersiz oturum ID." });
     }
-    const sess = await Session.findById(id).select("_id title policy requireLocation expiresAt endAt").lean();
+    const sess = await Session.findById(id).select("_id title policy openRole requireLocation expiresAt endAt").lean();
     if (!sess) {
       return res.status(404).json({ status: "error", message: "Oturum bulunamadı." });
     }
@@ -643,26 +643,88 @@ app.post("/mark-attendance", validateAttendance, async (req, res) => {
       studentClassRoll = student.classRollNo;
       studentId = student._id;
     } else {
-      // open policy
-      if (student) {
-        studentName = student.name;
-        studentSection = student.section;
-        studentClassRoll = student.classRollNo;
-        studentId = student._id;
-      } else {
-        // open modda name zorunlu
-        if (!sentName || !sentName.trim()) {
+      // open policy — role = session.openRole (katılımcı seçmiyor, admin seçmiş)
+      const role = dbSession.openRole || "student";
+      let attMeta = {};
+      let attName = sentName ? sentName.trim() : "";
+
+      if (role === "student") {
+        // Student: zorunlu = name + universityRollNo
+        if (!attName) {
           await txn.abortTransaction();
           txn.endSession();
           return res.status(400).json({
             status: "error",
-            message: "Ad soyad bilgisi gereklidir (açık kayıt modunda).",
+            message: "Öğrenci için ad soyad zorunludur.",
           });
         }
-        studentName = sentName.trim();
+        if (!universityRollNo || !/^\d{9}$/.test(universityRollNo)) {
+          await txn.abortTransaction();
+          txn.endSession();
+          return res.status(400).json({
+            status: "error",
+            message: "Öğrenci için öğrenci numarası zorunludur.",
+          });
+        }
+        studentName = attName;
+      } else if (role === "academic") {
+        // Academic: zorunlu = name, opsiyonel = unit
+        if (!attName) {
+          await txn.abortTransaction();
+          txn.endSession();
+          return res.status(400).json({
+            status: "error",
+            message: "Akademisyen için ad soyad zorunludur.",
+          });
+        }
+        studentName = attName;
+        if (req.body.unit) attMeta.unit = req.body.unit.trim();
+      } else if (role === "guest") {
+        // Guest: zorunlu = name, opsiyonel = email
+        if (!attName) {
+          await txn.abortTransaction();
+          txn.endSession();
+          return res.status(400).json({
+            status: "error",
+            message: "Misafir için ad soyad zorunludur.",
+          });
+        }
+        studentName = attName;
+        if (req.body.email) attMeta.email = req.body.email.trim();
       }
+
+      // Attendance create
+      const attendance = await Attendance.create(
+        [{
+          sessionId: dbSession._id,
+          name: studentName,
+          universityRollNo,
+          section: studentSection,
+          classRollNo: studentClassRoll,
+          role: role,
+          meta: attMeta,
+          location: location || undefined,
+          deviceFingerprint: deviceFingerprint || undefined,
+          date: today,
+          time: new Date().toLocaleTimeString("tr-TR", { hour12: false }),
+          status: "present",
+          studentId,
+          distanceFromClass: distance,
+        }],
+        { session: txn }
+      );
+
+      await txn.commitTransaction();
+      txn.endSession();
+      res.json({
+        status: "success",
+        message: "Yoklama başarıyla kaydedildi.",
+        data: attendance[0],
+      });
+      return;
     }
 
+    // whitelist policy — eski davranış devam etsin
     const attendance = await Attendance.create(
       [{
         sessionId: dbSession._id,
@@ -670,6 +732,8 @@ app.post("/mark-attendance", validateAttendance, async (req, res) => {
         universityRollNo,
         section: studentSection,
         classRollNo: studentClassRoll,
+        role: "student",
+        meta: {},
         location: location || undefined,
         deviceFingerprint: deviceFingerprint || undefined,
         date: today,

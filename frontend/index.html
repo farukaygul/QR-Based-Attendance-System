@@ -52,7 +52,7 @@
                 <div id="fetchError" class="text-sm text-center text-red-600 font-medium hidden"></div>
             </div>
 
-            <!-- ADIM 1-OPEN: Ad Soyad + opsiyonel Öğrenci No (open modu) -->
+            <!-- ADIM 1-OPEN: Ad Soyad + Rol-spesifik alanlar (open modu) -->
             <div id="step1Open" class="hidden space-y-4">
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700 mb-1">
                     <p class="font-semibold" id="openSessionTitle"></p>
@@ -63,11 +63,30 @@
                     <input type="text" id="openName" placeholder="Adınızı ve soyadınızı girin" required
                         class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
                 </div>
-                <div>
-                    <label for="openRollNo" class="block text-sm font-medium text-gray-700 mb-1">Öğrenci Numarası <span class="text-xs text-gray-400">(opsiyonel)</span></label>
-                    <input type="text" id="openRollNo" placeholder="Öğrenci No (opsiyonel)"
-                        inputmode="numeric" maxlength="9"
-                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                <!-- Student: Öğrenci Numarası (zorunlu) -->
+                <div id="studentFields" class="space-y-3">
+                    <div>
+                        <label for="openRollNo" class="block text-sm font-medium text-gray-700 mb-1">Öğrenci Numarası <span class="text-red-500">*</span></label>
+                        <input type="text" id="openRollNo" placeholder="Öğrenci numaranızı girin" required
+                            inputmode="numeric" maxlength="9"
+                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                </div>
+                <!-- Academic: Birim (opsiyonel) -->
+                <div id="academicFields" class="hidden space-y-3">
+                    <div>
+                        <label for="openUnit" class="block text-sm font-medium text-gray-700 mb-1">Birim <span class="text-xs text-gray-400">(opsiyonel)</span></label>
+                        <input type="text" id="openUnit" placeholder="Birim adı (ör. İnsan Kaynakları)"
+                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                </div>
+                <!-- Guest: E-posta (opsiyonel) -->
+                <div id="guestFields" class="hidden space-y-3">
+                    <div>
+                        <label for="openEmail" class="block text-sm font-medium text-gray-700 mb-1">E-posta <span class="text-xs text-gray-400">(opsiyonel)</span></label>
+                        <input type="email" id="openEmail" placeholder="E-posta adresiniz"
+                            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
                 </div>
                 <button id="openSubmitBtn" type="button"
                     class="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center">

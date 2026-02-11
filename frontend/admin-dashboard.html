@@ -275,6 +275,15 @@
                 <option value="open">Open (herkes katılabilir)</option>
               </select>
             </div>
+            <div id="openRoleContainer" class="hidden">
+              <label class="block text-xs font-medium text-gray-600 mb-1">Open Modu Katılımcı Türü</label>
+              <select id="sessOpenRole"
+                      class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 bg-white">
+                <option value="student">Öğrenci</option>
+                <option value="academic">Akademisyen</option>
+                <option value="guest">Misafir</option>
+              </select>
+            </div>
             <div class="flex items-center gap-2 pt-5">
               <input type="checkbox" id="sessRequireLoc" checked class="h-4 w-4 text-primary-600 rounded" />
               <label for="sessRequireLoc" class="text-sm text-gray-700">Konum zorunlu</label>
@@ -799,6 +808,15 @@
         }
       });
 
+      // Session policy değişince, openRole dropdown'ını göster/gizle
+      document.getElementById("sessPolicy").addEventListener("change", (e) => {
+        const policyVal = e.target.value;
+        const openRoleContainer = document.getElementById("openRoleContainer");
+        if (openRoleContainer) {
+          openRoleContainer.classList.toggle("hidden", policyVal !== "open");
+        }
+      });
+
       // Yeni oturum oluştur
       document.getElementById("sessCreateBtn").addEventListener("click", async () => {
         const title = document.getElementById("sessTitle").value.trim();
@@ -806,12 +824,16 @@
         const btn = document.getElementById("sessCreateBtn");
         setLoading(btn, true, "Oturum Başlat");
         try {
+          const policy = document.getElementById("sessPolicy").value;
           const body = {
             title,
             ttlMinutes: parseInt(document.getElementById("sessTTL").value, 10) || 15,
-            policy: document.getElementById("sessPolicy").value,
+            policy,
             requireLocation: document.getElementById("sessRequireLoc").checked,
           };
+          if (policy === "open") {
+            body.openRole = document.getElementById("sessOpenRole").value || "student";
+          }
           const res = await adminFetch(`${API}/api/admin/sessions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

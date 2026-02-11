@@ -6,6 +6,8 @@ const attendancesSchema = new mongoose.Schema({
   universityRollNo: { type: String, required: true },
   section: { type: String, default: "" },
   classRollNo: { type: String, default: "" },
+  role: { type: String, enum: ["student", "academic", "guest"], default: "student" },
+  meta: { type: Object, default: {} },
   date: { type: String, required: true },
   time: {
     type: String,

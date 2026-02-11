@@ -8,6 +8,11 @@ const sessionSchema = new mongoose.Schema(
       enum: ["whitelist", "open"],
       default: "whitelist",
     },
+    openRole: {
+      type: String,
+      enum: ["student", "academic", "guest"],
+      default: "student",
+    },
     requireLocation: { type: Boolean, default: true },
     startAt: { type: Date, default: Date.now },
     endAt: { type: Date, default: null },
