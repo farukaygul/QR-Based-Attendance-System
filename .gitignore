@@ -5,3 +5,7 @@ backend/.env
 
 # generated QR images
 frontend/public/qrcodes/*.png
+
+# env
+.env
+backend/.env
