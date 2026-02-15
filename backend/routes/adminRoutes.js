@@ -822,4 +822,85 @@ router.delete("/attendance/:id", requireAdminAuth, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════
+//  SESSION-BASED REPORTING (yeni sprint-4 raporlama)
+// ═══════════════════════════════════════════════════
+
+// Ortak handler: session listesi
+async function listSessions(req, res) {
+  try {
+    let limit = parseInt(req.query.limit, 10) || 50;
+    if (limit < 1) limit = 1;
+    if (limit > 200) limit = 200;
+
+    const { date, month } = req.query;
+    const filter = {};
+
+    if (date) {
+      if (!DATE_RE.test(date)) {
+        return res.status(400).json({
+          status: "error",
+          message: "date parametresi YYYY-MM-DD formatında olmalıdır.",
+        });
+      }
+      const dayStart = new Date(`${date}T00:00:00`);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      filter.startAt = { $gte: dayStart, $lt: dayEnd };
+    } else if (month) {
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({
+          status: "error",
+          message: "month parametresi YYYY-MM formatında olmalıdır.",
+        });
+      }
+      const monthStart = new Date(`${month}-01T00:00:00`);
+      const monthEnd = new Date(monthStart);
+      monthEnd.setMonth(monthEnd.getMonth() + 1);
+      filter.startAt = { $gte: monthStart, $lt: monthEnd };
+    }
+
+    const sessions = await Session.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json({ status: "success", data: sessions });
+  } catch (error) {
+    console.error("Admin sessions list hatası:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+}
+
+// GET /api/admin/sessions — session listesi
+router.get("/sessions-list", requireAdminAuth, listSessions);
+
+// GET /api/admin/sessions — alias (tutarlı isimlendirme)
+router.get("/sessions", requireAdminAuth, listSessions);
+
+// GET /api/admin/attendance/by-session/:sessionId — session'a ait kayıtlar
+router.get("/attendance/by-session/:sessionId", requireAdminAuth, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+      return res.status(400).json({ status: "error", message: "Geçersiz oturum ID." });
+    }
+
+    const session = await Session.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ status: "error", message: "Oturum bulunamadı." });
+    }
+
+    const records = await Attendance.find({ sessionId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ status: "success", data: records });
+  } catch (error) {
+    console.error("Admin attendance by-session hatası:", error);
+    res.status(500).json({ status: "error", message: "Sunucu hatası." });
+  }
+});
+
 module.exports = router;

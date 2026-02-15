@@ -298,7 +298,78 @@
     </section>
 
     <!-- ═══════════════════════════════════════════════ -->
-    <!--  4) 👨‍🎓 ÖĞRENCİ YÖNETİMİ (Accordion)         -->
+    <!--  4) � OTURUM BASİ RAPOR (Sprint-4)        -->
+    <!-- ═══════════════════════════════════════════════ -->
+    <section class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">📌 Oturum Bazlı Rapor</h2>
+      <div class="space-y-4">
+        <!-- Session Seçim -->
+        <div class="flex flex-wrap gap-2 items-end">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Tarih</label>
+            <input type="date" id="sessionReportDate"
+                   class="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Ay</label>
+            <input type="month" id="sessionReportMonth"
+                   class="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <button id="sessionReportFilterBtn"
+                  class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium">
+            Oturumları Getir
+          </button>
+          <div class="flex-grow">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Oturum Seç</label>
+            <select id="sessionReportSelect"
+                    class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 bg-white">
+              <option value="">-- Oturum Seçiniz --</option>
+            </select>
+          </div>
+          <button id="sessionReportBtn"
+                  class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium">
+            Listele
+          </button>
+        </div>
+
+        <!-- Rapor Tablosu -->
+        <div id="sessionReportResults" class="hidden">
+          <div class="flex flex-wrap items-center justify-between mb-3">
+            <p class="text-sm text-gray-600">
+              <span id="sessionReportTitle" class="font-medium"></span> —
+              <span id="sessionReportCount" class="font-semibold text-primary-700"></span>
+            </p>
+            <button id="downloadSessionCsvBtn"
+                    class="bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 text-xs font-medium">
+              CSV İndir
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full border border-gray-200 text-xs">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-3 py-2 border text-left">Tarih</th>
+                  <th class="px-3 py-2 border text-left">Saat</th>
+                  <th class="px-3 py-2 border text-left">Role</th>
+                  <th class="px-3 py-2 border text-left">Ad Soyad</th>
+                  <th class="px-3 py-2 border text-left">Öğrenci No</th>
+                  <th class="px-3 py-2 border text-left">Durum</th>
+                  <th class="px-3 py-2 border text-left">Birim</th>
+                  <th class="px-3 py-2 border text-left">E-posta</th>
+                  <th class="px-3 py-2 border text-left">Not</th>
+                </tr>
+              </thead>
+              <tbody id="sessionReportTableBody" class="divide-y">
+                <!-- Dinamik satırlar -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════ -->
+    <!--  5) �👨‍🎓 ÖĞRENCİ YÖNETİMİ (Accordion)         -->
     <!-- ═══════════════════════════════════════════════ -->
     <section class="bg-white rounded-lg shadow-md">
       <button id="toggleStudentPanel" type="button"
@@ -593,7 +664,7 @@
         options.headers["Authorization"] = `Bearer ${jwt}`;
       }
       const res = await fetch(url, options);
-      if (res.status === 401) {
+      if (res.status === 401 && authMode === "jwt") {
         doLogout();
         throw new Error("Oturum süresi doldu.");
       }
@@ -634,6 +705,19 @@
     function formatDistance(record) {
       if (record.distanceFromClass != null) return record.distanceFromClass.toFixed(1) + " m";
       return "-";
+    }
+
+    function escHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function escAttr(str) {
+      return escHtml(str);
     }
 
     function emptyRow(cols, msg) {
@@ -703,8 +787,24 @@
         } catch (_) { /* sessizce */ }
       }
 
+      async function loadPublicSettings() {
+        try {
+          const res = await fetch(`${API}/api/public/settings`);
+          const json = await res.json();
+          if (!res.ok || !json?.data) return;
+          const s = json.data;
+          document.getElementById("headerOrg").textContent = s.orgTitle || "Suluova MYO";
+          document.getElementById("headerCourse").textContent =
+            (s.courseTitle || "Yapay Zeka Okuryazarlığı") + " — Yönetici Paneli";
+        } catch (_) { /* sessizce */ }
+      }
+
       // Sayfa açılınca ayarları yükle
-      loadSettings();
+      if (authMode === "jwt") {
+        loadSettings();
+      } else {
+        loadPublicSettings();
+      }
 
       // Settings accordion
       const settingsPanel = document.getElementById("settingsPanel");
@@ -778,9 +878,9 @@
             const policyTR = activeSession.policy === "open" ? "Açık" : "Whitelist";
             const locTR = activeSession.requireLocation ? "Evet" : "Hayır";
             infoEl.innerHTML =
-              `<span class="font-semibold text-gray-800">${activeSession.title}</span><br/>` +
+              `<span class="font-semibold text-gray-800">${escHtml(activeSession.title)}</span><br/>` +
               `<span class="text-xs">Politika: <b>${policyTR}</b> | Konum: <b>${locTR}</b> | Bitiş: ${exp}</span><br/>` +
-              `<span class="text-xs font-mono text-gray-400">ID: ${activeSession._id}</span>`;
+              `<span class="text-xs font-mono text-gray-400">ID: ${escHtml(activeSession._id)}</span>`;
             closeBtn.classList.remove("hidden");
           } else {
             activeSession = null;
@@ -884,11 +984,11 @@
             data.forEach((r) => {
               tbody.insertAdjacentHTML("beforeend", `
                 <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 border">${r.universityRollNo || "-"}</td>
-                  <td class="px-3 py-2 border">${r.name || "-"}</td>
-                  <td class="px-3 py-2 border">${r.section || "-"}</td>
-                  <td class="px-3 py-2 border">${formatTime(r.time)}</td>
-                  <td class="px-3 py-2 border">${formatDistance(r)}</td>
+                  <td class="px-3 py-2 border">${escHtml(r.universityRollNo || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(r.name || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(r.section || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(formatTime(r.time))}</td>
+                  <td class="px-3 py-2 border">${escHtml(formatDistance(r))}</td>
                 </tr>`);
             });
           }
@@ -943,17 +1043,17 @@
           if (!data.attendanceRecords || data.attendanceRecords.length === 0) {
             tbody.innerHTML = emptyRow(4, "Bu öğrenci için yoklama kaydı bulunamadı.");
           } else {
-            data.attendanceRecords.forEach((r) => {
-              const isPresent = r.status === "present";
-              tbody.insertAdjacentHTML("beforeend", `
+              data.attendanceRecords.forEach((r) => {
+                const isPresent = r.status === "present";
+                tbody.insertAdjacentHTML("beforeend", `
                 <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 border">${r.date || "-"}</td>
-                  <td class="px-3 py-2 border">${formatTime(r.time)}</td>
+                  <td class="px-3 py-2 border">${escHtml(r.date || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(formatTime(r.time))}</td>
                   <td class="px-3 py-2 border font-medium ${isPresent ? "text-green-600" : "text-red-500"}">${isPresent ? "Var" : "Yok"}</td>
-                  <td class="px-3 py-2 border">${formatDistance(r)}</td>
+                  <td class="px-3 py-2 border">${escHtml(formatDistance(r))}</td>
                 </tr>`);
-            });
-          }
+              });
+            }
           detailsDiv.classList.remove("hidden");
         } catch (err) {
           console.error(err);
@@ -1015,11 +1115,11 @@
             students.forEach((s) => {
               tbody.insertAdjacentHTML("beforeend", `
                 <tr class="hover:bg-gray-50">
-                  <td class="px-3 py-2 border">${s.universityRollNo || "-"}</td>
-                  <td class="px-3 py-2 border">${s.name || "-"}</td>
-                  <td class="px-3 py-2 border">${s.section || "-"}</td>
-                  <td class="px-3 py-2 border font-medium">%${s.attendancePercentage}</td>
-                  <td class="px-3 py-2 border">${s.presentDays}/${s.totalClasses}</td>
+                  <td class="px-3 py-2 border">${escHtml(s.universityRollNo || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(s.name || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(s.section || "-")}</td>
+                  <td class="px-3 py-2 border font-medium">%${escHtml(s.attendancePercentage)}</td>
+                  <td class="px-3 py-2 border">${escHtml(`${s.presentDays}/${s.totalClasses}`)}</td>
                 </tr>`);
             });
           }
@@ -1044,7 +1144,131 @@
       });
 
       // ═══════════════════════════════════════════
-      //  4) ÖĞRENCİ YÖNETİMİ (CRUD)
+      //  4) OTURUM BAZIRAPOR (Sprint-4)
+      // ═══════════════════════════════════════════
+      const sessionReportDate = document.getElementById("sessionReportDate");
+      const sessionReportMonth = document.getElementById("sessionReportMonth");
+      const sessionReportFilterBtn = document.getElementById("sessionReportFilterBtn");
+      const sessionReportSelect = document.getElementById("sessionReportSelect");
+      const sessionReportBtn = document.getElementById("sessionReportBtn");
+      const downloadSessionCsvBtn = document.getElementById("downloadSessionCsvBtn");
+
+      // Session listesi yükle
+      async function loadSessionsForReport() {
+        try {
+          const params = new URLSearchParams({ limit: "200" });
+          if (sessionReportDate.value) {
+            params.set("date", sessionReportDate.value);
+          } else if (sessionReportMonth.value) {
+            params.set("month", sessionReportMonth.value);
+          }
+
+          const res = await adminFetch(`${API}/api/admin/sessions-list?${params.toString()}`);
+          const json = await res.json();
+          if (!res.ok) return;
+
+          sessionReportSelect.innerHTML = '<option value="">-- Oturum Seçiniz --</option>';
+          const sessions = json.data || [];
+          sessions.forEach((sess) => {
+            const start = new Date(sess.startAt || sess.createdAt);
+            const opt = document.createElement("option");
+            opt.value = sess._id;
+            opt.textContent = `${start.toLocaleDateString("tr-TR")} ${start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} • (${sess.policy}) ${sess.title}`;
+            sessionReportSelect.appendChild(opt);
+          });
+
+          if (sessions.length === 0) {
+            const emptyOpt = document.createElement("option");
+            emptyOpt.value = "";
+            emptyOpt.textContent = "-- Seçilen filtrede oturum yok --";
+            sessionReportSelect.appendChild(emptyOpt);
+          }
+        } catch (_) { /* sessizce geç */ }
+      }
+      if (authMode === "jwt") {
+        sessionReportDate.value = todayStr();
+        loadSessionsForReport();
+      }
+
+      sessionReportDate.addEventListener("change", () => {
+        if (sessionReportDate.value) sessionReportMonth.value = "";
+      });
+      sessionReportMonth.addEventListener("change", () => {
+        if (sessionReportMonth.value) sessionReportDate.value = "";
+      });
+      sessionReportFilterBtn.addEventListener("click", () => {
+        loadSessionsForReport();
+      });
+
+      // Rapor listele
+      sessionReportBtn.addEventListener("click", async () => {
+        const sessionId = sessionReportSelect.value;
+        if (!sessionId) { toast("Bir oturum seçin.", false); return; }
+
+        sessionReportBtn.disabled = true;
+        try {
+          const res = await adminFetch(`${API}/api/admin/attendance/by-session/${sessionId}`);
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.message || "Rapor yüklenemedi.");
+
+          const records = json.data || [];
+          const sessionTitle = (sessionReportSelect.selectedOptions[0]?.text) || "Bilinmeyen Oturum";
+          document.getElementById("sessionReportTitle").textContent = sessionTitle;
+          document.getElementById("sessionReportCount").textContent = `${records.length} kayıt`;
+
+          const tbody = document.getElementById("sessionReportTableBody");
+          tbody.innerHTML = "";
+          records.forEach((att) => {
+            const row = tbody.insertRow();
+            const createdAt = new Date(att.createdAt);
+            const dateStr = createdAt.toLocaleDateString("tr-TR");
+            const timeStr = createdAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+
+            const role = att.role || "unknown";
+            const unit = (att.meta && att.meta.unit) ? att.meta.unit : "";
+            const email = (att.meta && att.meta.email) ? att.meta.email : "";
+            const status = att.manual ? "Manuel" : "Otomatik";
+
+            row.innerHTML = `
+              <td class="px-3 py-2 border">${escHtml(dateStr)}</td>
+              <td class="px-3 py-2 border">${escHtml(timeStr)}</td>
+              <td class="px-3 py-2 border text-xs font-medium">${escHtml(role)}</td>
+              <td class="px-3 py-2 border">${escHtml(att.name || "")}</td>
+              <td class="px-3 py-2 border">${escHtml(att.universityRollNo || "-")}</td>
+              <td class="px-3 py-2 border text-xs">${escHtml(status)}</td>
+              <td class="px-3 py-2 border">${escHtml(unit || "-")}</td>
+              <td class="px-3 py-2 border">${escHtml(email || "-")}</td>
+              <td class="px-3 py-2 border text-xs text-gray-500">${escHtml(att.note || "-")}</td>
+            `;
+          });
+
+          document.getElementById("sessionReportResults").classList.remove("hidden");
+        } catch (err) {
+          toast("Rapor hatası: " + err.message, false);
+        } finally {
+          sessionReportBtn.disabled = false;
+        }
+      });
+
+      // CSV indir
+      downloadSessionCsvBtn.addEventListener("click", () => {
+        const sessionTitle = (sessionReportSelect.selectedOptions[0]?.text) || "rapor";
+        const rows = Array.from(document.getElementById("sessionReportTableBody").rows);
+        
+        let csv = "Tarih,Saat,Role,Ad Soyad,Öğrenci No,Durum,Birim,E-posta,Not\n";
+        rows.forEach((row) => {
+          const cells = Array.from(row.cells).map((c) => {
+            const text = c.textContent.trim().replace(/"/g, '""');
+            return `"${text}"`;
+          });
+          csv += cells.join(",") + "\n";
+        });
+
+        downloadCsv(csv, `oturum-rapor_${sessionTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.csv`);
+      });
+
+      // ═══════════════════════════════════════════
+      //  5) ÖĞRENCİ YÖNETİMİ (CRUD)
       // ═══════════════════════════════════════════
       const stuPanel = document.getElementById("studentPanel");
       const stuArrow = document.getElementById("studentPanelArrow");
@@ -1316,7 +1540,7 @@
           if (errList.length > 0) {
             let html = '<table class="w-full"><thead><tr><th class="text-left px-1">Satır</th><th class="text-left px-1">No</th><th class="text-left px-1">Sebep</th></tr></thead><tbody>';
             errList.slice(0, 20).forEach((e) => {
-              html += `<tr><td class="px-1 border">${e.row}</td><td class="px-1 border">${e.universityRollNo || "-"}</td><td class="px-1 border">${e.reason}</td></tr>`;
+              html += `<tr><td class="px-1 border">${escHtml(e.row)}</td><td class="px-1 border">${escHtml(e.universityRollNo || "-")}</td><td class="px-1 border">${escHtml(e.reason)}</td></tr>`;
             });
             if (errList.length > 20) html += `<tr><td colspan="3" class="px-1 text-gray-400">…ve ${errList.length - 20} satır daha</td></tr>`;
             html += '</tbody></table>';
@@ -1386,22 +1610,21 @@
           } else {
             records.forEach((r) => {
               const isPresent = r.status === "present";
-              const escAttr = (str) => (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
               tbody.insertAdjacentHTML("beforeend", `
                 <tr class="hover:bg-gray-50" data-id="${r._id}">
-                  <td class="px-3 py-2 border">${r.date || "-"}</td>
-                  <td class="px-3 py-2 border">${formatTime(r.time)}</td>
-                  <td class="px-3 py-2 border font-mono">${r.universityRollNo || "-"}</td>
-                  <td class="px-3 py-2 border">${r.name || "-"}</td>
-                  <td class="px-3 py-2 border">${r.section || "-"}</td>
+                  <td class="px-3 py-2 border">${escHtml(r.date || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(formatTime(r.time))}</td>
+                  <td class="px-3 py-2 border font-mono">${escHtml(r.universityRollNo || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(r.name || "-")}</td>
+                  <td class="px-3 py-2 border">${escHtml(r.section || "-")}</td>
                   <td class="px-3 py-2 border font-medium ${isPresent ? "text-green-600" : "text-red-500"}">${isPresent ? "Var" : "Yok"}</td>
-                  <td class="px-3 py-2 border">${formatDistance(r)}</td>
+                  <td class="px-3 py-2 border">${escHtml(formatDistance(r))}</td>
                   <td class="px-3 py-2 border text-center">${r.manual ? '<span class="bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded">Manuel</span>' : "-"}</td>
-                  <td class="px-3 py-2 border text-xs">${r.note || "-"}</td>
+                  <td class="px-3 py-2 border text-xs">${escHtml(r.note || "-")}</td>
                   <td class="px-3 py-2 border text-center space-x-1">
-                    <button data-action="att-edit" data-id="${r._id}" data-status="${escAttr(r.status)}" data-note="${escAttr(r.note)}"
+                    <button data-action="att-edit" data-id="${escAttr(r._id)}" data-status="${escAttr(r.status)}" data-note="${escAttr(r.note)}"
                             class="text-primary-600 hover:underline text-xs font-medium">Düzenle</button>
-                    <button data-action="att-delete" data-id="${r._id}"
+                    <button data-action="att-delete" data-id="${escAttr(r._id)}"
                             class="text-red-500 hover:underline text-xs font-medium">Sil</button>
                   </td>
                 </tr>`);

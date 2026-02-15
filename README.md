@@ -99,7 +99,8 @@ QR_SECRET_KEY=supersecret123
 git clone https://github.com/yourusername/qr-based-attendance-system.git
 cd qr-based-attendance-system
 
-# Install dependencies
+# Install backend dependencies
+cd backend
 npm install
 
 # Start the backend server
@@ -112,8 +113,8 @@ node server.js
 
 Open these in your browser:
 
-* `http://localhost:5000/qr-scanner.html` → Generate QR code
-* `http://localhost:5000/index.html?sessionId=...` → Mark attendance
+* `http://localhost:<PORT>/qr-scanner.html` → Generate QR code
+* `http://localhost:<PORT>/index.html?sessionId=...` → Mark attendance
 
 ---
 

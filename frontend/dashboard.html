@@ -46,56 +46,97 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", async () => {
-      const rollNo = new URLSearchParams(window.location.search).get("rollNo");
+      const qs = new URLSearchParams(window.location.search);
+      const rollNo = qs.get("rollNo");                // öğrenci akışı
+      const attendanceId = qs.get("attendanceId");    // academic/guest akışı
+      const role = (qs.get("role") || "").toLowerCase();
+
       const loadingEl = document.getElementById("loading");
       const errorEl = document.getElementById("errorBox");
       const tableContainer = document.getElementById("tableContainer");
       const tbody = document.getElementById("attendanceBody");
       const summaryEl = document.getElementById("summaryText");
 
-      if (!rollNo) {
+      function showError(msg) {
         loadingEl.classList.add("hidden");
-        errorEl.textContent = "URL'de öğrenci numarası bulunamadı.";
+        errorEl.textContent = msg;
         errorEl.classList.remove("hidden");
-        return;
+        tableContainer.classList.add("hidden");
       }
 
       try {
-        const res = await fetch(`${window.location.origin}/api/students/${encodeURIComponent(rollNo)}/attendance`);
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || errData.error || "Veri yüklenemedi");
-        }
+        // 1) STUDENT MODE
+        if (rollNo) {
+          const res = await fetch(`${window.location.origin}/api/students/${encodeURIComponent(rollNo)}/attendance`);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || errData.error || "Veri yüklenemedi");
+          }
 
-        const { data } = await res.json();
-        loadingEl.classList.add("hidden");
+          const { data } = await res.json();
+          loadingEl.classList.add("hidden");
 
-        summaryEl.textContent = `Öğrenci No: ${rollNo}  •  Katılım: ${data.presentDays}/${data.totalClasses}  •  %${data.attendancePercentage}`;
+          summaryEl.textContent = `Öğrenci No: ${rollNo}  •  Katılım: ${data.presentDays}/${data.totalClasses}  •  %${data.attendancePercentage}`;
 
-        if (!data.attendanceRecords || data.attendanceRecords.length === 0) {
-          errorEl.textContent = "Henüz yoklama kaydı bulunmamaktadır.";
-          errorEl.classList.remove("hidden");
+          if (!data.attendanceRecords || data.attendanceRecords.length === 0) {
+            showError("Henüz yoklama kaydı bulunmamaktadır.");
+            return;
+          }
+
+          data.attendanceRecords.forEach((rec) => {
+            const tr = document.createElement("tr");
+            const isPresent = rec.status === "present";
+            const statusText = isPresent ? "Var" : "Yok";
+            const statusClass = isPresent ? "text-green-600" : "text-red-500";
+            tr.innerHTML = `
+              <td class="px-4 py-2 border">${rec.date || "-"}</td>
+              <td class="px-4 py-2 border font-medium ${statusClass}">${statusText}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          tableContainer.classList.remove("hidden");
           return;
         }
 
-        data.attendanceRecords.forEach((rec) => {
+        // 2) ACADEMIC/GUEST MODE
+        if (attendanceId) {
+          const res = await fetch(`${window.location.origin}/api/attendance/by-id/${encodeURIComponent(attendanceId)}`);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || errData.error || "Veri yüklenemedi");
+          }
+
+          const { data } = await res.json();
+          loadingEl.classList.add("hidden");
+
+          const name = data.name || "-";
+          const roleDisplay = role ? role.toUpperCase() : (data.role || "-").toString().toUpperCase();
+          const statusText = data.status === "present" ? "Var" : (data.status === "absent" ? "Yok" : (data.status || "-"));
+
+          summaryEl.textContent = `${roleDisplay}: ${name} • Kayıt Durumu: ${statusText}`;
+
+          const createdAt = data.createdAt ? new Date(data.createdAt) : null;
+          const dateStr = createdAt ? createdAt.toLocaleDateString("tr-TR") : (data.date || "-");
+
           const tr = document.createElement("tr");
-          const isPresent = rec.status === "present";
-          const statusText = isPresent ? "Var" : "Yok";
+          const isPresent = data.status === "present";
           const statusClass = isPresent ? "text-green-600" : "text-red-500";
           tr.innerHTML = `
-            <td class="px-4 py-2 border">${rec.date || "-"}</td>
+            <td class="px-4 py-2 border">${dateStr}</td>
             <td class="px-4 py-2 border font-medium ${statusClass}">${statusText}</td>
           `;
           tbody.appendChild(tr);
-        });
 
-        tableContainer.classList.remove("hidden");
+          tableContainer.classList.remove("hidden");
+          return;
+        }
+
+        showError("Eksik parametre: rollNo veya attendanceId bulunamadı.");
+
       } catch (err) {
         console.error("Fetch error:", err);
-        loadingEl.classList.add("hidden");
-        errorEl.textContent = err.message;
-        errorEl.classList.remove("hidden");
+        showError(err.message);
       }
     });
   </script>
